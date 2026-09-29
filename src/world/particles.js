@@ -14,13 +14,13 @@ function lanternGeometry(kind) {
   if (kind === 'sky') return L([[0, 0], [1.3, 0], [1.9, 2.5], [2.0, 4.2], [1.4, 5.2], [0, 5.3]], 10) // 孔明灯
   if (kind === 'lotus') {
     // 莲花灯：浅碗 + 两层花瓣
-    const parts = [L([[0, 0], [1.0, 0], [1.3, 0.5], [0.2, 0.6], [0, 0.6]], 12)]
+    const parts = [L([[0, 0], [1.0, 0], [1.3, 0.5], [0.2, 0.6], [0, 0.6]], 8)]
     for (let layer = 0; layer < 2; layer++) {
-      for (let i = 0; i < 8; i++) {
-        const g = new THREE.SphereGeometry(0.55, 8, 6).scale(0.55, 1.25, 0.28)
+      for (let i = 0; i < 7; i++) {
+        const g = new THREE.SphereGeometry(0.55, 5, 3).scale(0.55, 1.25, 0.28)
         g.rotateX(layer ? -0.35 : -0.6)
         g.translate(0, 0.9, layer ? 0.55 : 0.95)
-        g.rotateY((i / 8) * Math.PI * 2 + layer * 0.4)
+        g.rotateY((i / 7) * Math.PI * 2 + layer * 0.45)
         parts.push(g)
       }
     }

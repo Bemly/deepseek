@@ -576,3 +576,54 @@ export function waterfallMaterial(color = [0.8, 0.92, 1.0]) {
 export function smoothTerrain(x, z, { base = 0, amp = 300, scale = 4000, seed = 1 } = {}) {
   return base + amp * fbm2(x / scale + seed, z / scale - seed, 4)
 }
+
+// ---------- 雾带：一堆大而软的精灵点，横着排成一条条，缓慢漂移 ----------
+// blobs = [{ pos: Vector3, size: 世界单位直径, alpha }]
+export function mistBank(blobs, { color = [0.5, 0.55, 0.7], maxPx = 320, additive = true } = {}) {
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(blobs.flatMap((b) => b.pos.toArray()), 3))
+  g.setAttribute('aSize', new THREE.Float32BufferAttribute(blobs.map((b) => b.size), 1))
+  g.setAttribute('aAlpha', new THREE.Float32BufferAttribute(blobs.map((b) => b.alpha ?? 0.3), 1))
+  g.setAttribute('aSeed', new THREE.Float32BufferAttribute(blobs.map((_, i) => (i * 0.618) % 1), 1))
+  const m = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+    uniforms: { uTime: { value: 0 }, uCol: { value: new THREE.Color(...color) }, uPixelRatio: { value: 1 }, uAmt: { value: 1 }, uMax: { value: maxPx } },
+    vertexShader: /* glsl */ `
+      attribute float aSize;
+      attribute float aAlpha;
+      attribute float aSeed;
+      uniform float uTime, uPixelRatio, uMax;
+      varying float vA;
+      varying float vSeed;
+      void main() {
+        vec3 p = position + vec3(sin(uTime * 0.02 + aSeed * 30.0) * aSize * 0.08, 0.0, 0.0);
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = min(uMax, aSize * 600.0 / max(1.0, -mv.z)) * uPixelRatio;
+        vA = aAlpha;
+        vSeed = aSeed;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uCol;
+      uniform float uAmt;
+      varying float vA;
+      varying float vSeed;
+      ${GLSL_NOISE}
+      void main() {
+        vec2 d = gl_PointCoord - 0.5;
+        d.y *= 1.8; // 扁一点
+        float r = length(d) * 2.0;
+        float n = fbm(gl_PointCoord * 2.5 + vSeed * 17.0);
+        float a = pow(smoothstep(1.0, 0.0, r), 1.6) * (0.35 + 0.9 * n) * vA * uAmt;
+        if (a < 0.003) discard;
+        gl_FragColor = vec4(uCol * a, ${additive ? 'a' : 'a'});
+      }
+    `,
+  })
+  const pts = new THREE.Points(g, m)
+  pts.frustumCulled = false
+  return pts
+}

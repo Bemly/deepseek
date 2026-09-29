@@ -252,7 +252,8 @@ async function main() {
       $('lyric').textContent = text
       lastLyric = text
     }
-    requestAnimationFrame(frame)
+    // 自动截图模式下不跑动画循环，只在 renderAt 时渲染
+    if (!params.has('capture')) requestAnimationFrame(frame)
   }
 
   // 给自动化截图用：渲染指定时刻的一帧
