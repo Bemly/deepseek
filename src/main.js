@@ -44,12 +44,14 @@ async function main() {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: params.has('capture') })
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  renderer.shadowMap.type = THREE.PCFShadowMap
   const prFor = (q) => Math.min(window.devicePixelRatio || 1, q === 'low' ? 1 : q === 'ultra' ? 2 : 1.5)
   renderer.setPixelRatio(prFor(quality))
 
   const scene = new THREE.Scene()
   const camera = new THREE.PerspectiveCamera(38, 1, 1, 80000)
+  // 生成是同步的，先让"正在生成场景…"画出来
+  await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)))
   const world = createWorld(renderer, { quality, initial: params.get('theme') || defaults.theme }).attach(scene)
   const post = createPostFX(renderer, scene, camera, { bloom: params.get('bloom') !== '0', world })
 
@@ -193,6 +195,7 @@ async function main() {
   window.addEventListener('resize', resize)
   resize()
   world.compile(renderer, scene, camera)
+  $('loading')?.remove()
 
   // ---------- 主题 ----------
   const themeButtons = []

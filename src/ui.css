@@ -43,3 +43,11 @@ html, body { margin: 0; height: 100%; background: #04070f; color: var(--fg); ove
   .lyric { bottom: 132px; }
   .marks b { display: none; }
 }
+
+/* 场景是同步生成的（五个主题几秒钟），先显示一行提示 */
+.loading {
+  position: fixed; inset: 0; display: grid; place-items: center; z-index: 5;
+  color: #bfe3ff; font: 600 15px/1.4 "JetBrains Mono", ui-monospace, monospace; letter-spacing: 0.08em;
+  background: radial-gradient(ellipse at center, #0b1630 0%, #03060d 70%);
+  pointer-events: none;
+}

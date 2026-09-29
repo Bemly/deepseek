@@ -284,12 +284,13 @@ export function createLandscape() {
   const LH = new THREE.Vector3(-1900, WATER_Y, -520)
   const reef = new THREE.Group()
   reef.position.copy(LH)
-  const reefMat = new THREE.MeshStandardMaterial({ color: 0x151a24, roughness: 0.9, flatShading: true })
-  const bigRock = new THREE.Mesh(rock(150, 1.7, 0.55, 3), reefMat)
+  const reefMat = shoreRockMaterial()
+  const reefCol = { waterline: 0, stone: [0.07, 0.08, 0.1], moss: [0.04, 0.06, 0.05], wet: [0.02, 0.025, 0.035] }
+  const bigRock = new THREE.Mesh(shoreRock(150, 1.7, { flat: 0.55, detail: 64, ...reefCol }), reefMat)
   bigRock.scale.set(1.4, 1, 1.1)
   reef.add(bigRock)
   for (let i = 0; i < 9; i++) {
-    const r = new THREE.Mesh(rock(18 + R() * 45, i * 3.1, 0.7, 2), reefMat)
+    const r = new THREE.Mesh(shoreRock(18 + R() * 45, i * 3.1, { flat: 0.7, detail: 24, ...reefCol }), reefMat)
     const a = R() * Math.PI * 2
     r.position.set(Math.cos(a) * (170 + R() * 120), 0, Math.sin(a) * (140 + R() * 100))
     reef.add(r)
