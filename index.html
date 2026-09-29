@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Let Me Go 舞台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Monoton&family=Pacifico&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./src/ui.css" />
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+    <div id="ui">
+      <header class="top">
+        <div class="title">
+          <b>大肥鱼 · Let Me Go</b>
+          <span>MMD 背景场景预览</span>
+        </div>
+        <div class="section" id="section">intro</div>
+        <nav class="views" id="views"></nav>
+      </header>
+      <div class="lyric" id="lyric"></div>
+      <footer class="bar">
+        <button id="play" class="play" title="播放 / 暂停（空格）">▶</button>
+        <span id="time" class="time">0:00.0</span>
+        <div class="scrub">
+          <div class="marks" id="marks"></div>
+          <input id="seek" type="range" min="0" max="127.15" step="0.01" value="0" aria-label="歌曲进度" />
+        </div>
+        <label class="tog"><input type="checkbox" id="ref" checked /> 身高参考</label>
+        <label class="tog"><input type="checkbox" id="showLyric" checked /> 歌词</label>
+        <label class="tog"><input type="checkbox" id="tour" /> 漫游</label>
+        <select id="quality" aria-label="画质">
+          <option value="low">流畅</option>
+          <option value="high" selected>高</option>
+          <option value="ultra">极致</option>
+        </select>
+        <label class="file" id="fileLabel" hidden>选择 mp3<input type="file" id="file" accept="audio/*" /></label>
+      </footer>
+    </div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
