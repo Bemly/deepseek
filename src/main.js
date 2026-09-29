@@ -8,7 +8,16 @@ import { SONG, SECTIONS } from './lyrics.js'
 // 把 createWorld / world.update(t) 接到你自己的 MMD 播放器里即可（见 README）。
 
 const params = new URLSearchParams(location.search)
+const defaults = window.__STAGE_DEFAULTS__ || {}
 const $ = (id) => document.getElementById(id)
+const store = {
+  get(k) {
+    try { return localStorage.getItem(k) } catch { return null }
+  },
+  set(k, v) {
+    try { localStorage.setItem(k, v) } catch { /* 隐私模式等情况下存不了，忽略 */ }
+  },
+}
 
 const VIEWS = {
   front: { label: '正面', pos: [0, 17, 80], target: [0, 15, 0], fov: 38 },
@@ -28,7 +37,8 @@ async function loadFonts() {
 
 async function main() {
   await loadFonts()
-  const quality = params.get('q') || 'high'
+  const coarse = window.matchMedia?.('(pointer: coarse)').matches
+  const quality = params.get('q') || store.get('ds-stage-q') || (coarse ? 'low' : 'high')
   $('quality').value = quality
   const canvas = $('c')
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: params.has('capture') })
@@ -97,7 +107,7 @@ async function main() {
   // ---------- 时间轴 ----------
   const audio = new Audio()
   audio.preload = 'auto'
-  audio.src = params.get('audio') || './audio/let-me-go.mp3'
+  audio.src = params.get('audio') || defaults.audio || './audio/let-me-go.mp3'
   let audioOk = false
   audio.addEventListener('canplay', () => (audioOk = true))
   audio.addEventListener('error', () => {
@@ -112,7 +122,8 @@ async function main() {
   }
 
   let playing = false
-  let clock = parseFloat(params.get('t') || '0') || 0
+  let clock = parseFloat(params.get('t') || store.get('ds-stage-t') || defaults.t || '0') || 0
+  store.set('ds-stage-t', '')
   let lastNow = performance.now()
   const seekEl = $('seek')
   seekEl.max = SONG.duration
@@ -140,7 +151,7 @@ async function main() {
     $('marks').append(i)
     // 挨得太近的段落只画刻度不写名字
     const next = SECTIONS[k + 1]
-    if (next && next.t - s.t < 4) return
+    if (next && next.t - s.t < 7) return
     const b = document.createElement('b')
     b.style.left = `${x}%`
     b.textContent = s.name
@@ -159,10 +170,13 @@ async function main() {
   })
 
   $('quality').onchange = (e) => {
+    // 画质影响反射分辨率等初始化参数，存起来后重新加载
+    store.set('ds-stage-q', e.target.value)
+    store.set('ds-stage-t', clock.toFixed(2))
     const u = new URL(location.href)
-    u.searchParams.set('q', e.target.value)
-    u.searchParams.set('t', clock.toFixed(2))
-    location.href = u.toString()
+    u.searchParams.delete('q')
+    u.searchParams.delete('t')
+    location.replace(u.toString())
   }
 
   function resize() {
