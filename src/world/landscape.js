@@ -1,5 +1,6 @@
 import * as THREE from 'three'
-import { rng, fbm2, WATER_Y, glowPointMaterial } from './util.js'
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js'
+import { rng, fbm2, WATER_Y, glowPointMaterial, smooth } from './util.js'
 import { coastZ } from './city.js'
 
 // 地貌（远景粗糙、中景适度）：
@@ -51,6 +52,59 @@ export function rock(radius, seed, flat = 0.55, detail = 3) {
   }
   g.computeVertexNormals()
   return g
+}
+
+// 近景岩石：高细分（three 的 detail 是线性细分，48 ≈ 4.6 万面）、平滑着色；分层岩脊 + 顶部青苔 + 水线附近湿暗（顶点色）。
+// waterline = 岩石局部坐标里的水面高度。geometry.userData.top = 中心附近的顶面高度（放树用）
+export function shoreRock(radius, seed, { flat = 0.45, detail = 48, waterline = 1, stone = [0.34, 0.32, 0.3], moss = [0.16, 0.24, 0.11], wet = [0.06, 0.06, 0.07], mossy = 1 } = {}) {
+  let g = new THREE.IcosahedronGeometry(radius, detail)
+  g.deleteAttribute('normal')
+  g.deleteAttribute('uv')
+  g = mergeVertices(g)
+  const p = g.attributes.position
+  const v = new THREE.Vector3()
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i).normalize()
+    const n = fbm2(v.x * 1.6 + seed, v.z * 1.6 + v.y * 1.3, 6)
+    const ridge = 1 - Math.abs(fbm2(v.x * 3.1 - seed, v.z * 3.1 + v.y * 2.2, 5) * 2 - 1)
+    let r = radius * (0.7 + n * 0.55 + ridge * 0.12)
+    v.multiplyScalar(r)
+    v.y *= v.y > 0 ? flat : 0.35
+    // 水平岩层：一级级小台阶
+    const s = (v.y / radius) * 7 + seed
+    const f = s - Math.floor(s)
+    r = 1 + 0.035 * smooth((f - 0.65) / 0.25)
+    v.x *= r
+    v.z *= r
+    p.setXYZ(i, v.x, v.y, v.z)
+  }
+  g.computeVertexNormals()
+  const nrm = g.attributes.normal
+  const col = new Float32Array(p.count * 3)
+  let top = -Infinity
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i)
+    if (Math.hypot(x, z) < radius * 0.18) top = Math.max(top, y)
+    const ny = nrm.getY(i)
+    const grain = fbm2(x * 0.35 + seed, z * 0.35 + y * 0.5, 4)
+    const crev = fbm2(x * 0.9 - seed, y * 0.9 + z * 0.4, 3)
+    const shade = (0.75 + grain * 0.5) * (0.7 + 0.3 * smooth(crev * 1.6 - 0.2))
+    const mossAmt = mossy * smooth((ny - 0.5) / 0.35) * smooth((y - waterline - 0.8) / 2.5) * (0.55 + 0.45 * grain)
+    const wetAmt = 1 - smooth((y - waterline + 0.6) / 2.2)
+    for (let k = 0; k < 3; k++) {
+      let c = stone[k] * shade
+      c += (moss[k] * (0.8 + grain * 0.4) - c) * mossAmt
+      c += (wet[k] - c) * wetAmt * 0.85
+      col[i * 3 + k] = c
+    }
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3))
+  g.userData.top = top
+  return g
+}
+
+export function shoreRockMaterial() {
+  return new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 })
 }
 
 export function createLandscape() {

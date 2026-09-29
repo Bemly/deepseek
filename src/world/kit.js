@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { GLSL_NOISE, fbm2 } from './util.js'
+import { GLSL_NOISE, fbm2, rng } from './util.js'
 
 // 各主题共用的积木：固定数量的灯光组、光柱材质、带窗户的楼体材质、中式/和式曲面屋顶、塔、殿、
 // 浮空岛、云团、瀑布。
@@ -412,55 +412,106 @@ export function pagoda({ tiers = 7, baseW = 40, tierH = 26, taper = 0.9, rise = 
 
 // ---------- 浮空岛 ----------
 // 上面是微微隆起的平顶，下面是倒锥形岩体；顶点色：顶面草/石，下面岩石渐暗
-export function floatingIslandGeometry({ r = 1, depth = 1.6, seed = 1, top = [0.35, 0.55, 0.3], rock = [0.42, 0.36, 0.33], bottom = [0.12, 0.1, 0.12], segs = 40 } = {}) {
-  const rings = 14
+export function floatingIslandGeometry({ r = 1, depth = 1.6, seed = 1, top = [0.35, 0.55, 0.3], rock = [0.42, 0.36, 0.33], bottom = [0.12, 0.1, 0.12], segs = 160, lobes = 3 } = {}) {
+  // 浮空岛：微隆的草顶（边缘草皮外挑）+ 分层岩壁（水平岩层台阶、竖向冲沟、青苔垂痕）
+  // + 往下收成几股钟乳状的尖底。索引网格（列首尾相接）→ 平滑法线，没有接缝
+  const TR = 14 // 顶面圈数
+  const SR = 70 // 岩壁圈数
   const pos = [], col = [], idx = []
   const cTop = new THREE.Color(...top), cRock = new THREE.Color(...rock), cBot = new THREE.Color(...bottom)
+  const edgeR = (a) => r * (0.82 + 0.34 * fbm2(Math.cos(a) * 1.5 + seed, Math.sin(a) * 1.5 + seed * 2, 5))
+  const lobe = (a) => Math.pow(Math.abs(Math.sin(a * lobes * 0.5 + seed * 1.7 + 0.6 * fbm2(a * 2 + seed, 0.5, 3))), 1.6)
+  const c = new THREE.Color()
+  const push = (x, y, z, color) => { pos.push(x, y, z); col.push(color.r, color.g, color.b) }
   // 顶面
-  pos.push(0, 0.06 * r, 0)
-  col.push(cTop.r, cTop.g, cTop.b)
-  const edgeR = (a) => r * (0.85 + 0.3 * fbm2(Math.cos(a) * 1.5 + seed, Math.sin(a) * 1.5 + seed * 2, 4))
-  for (let j = 0; j < segs; j++) {
-    const a = (j / segs) * Math.PI * 2
-    const er = edgeR(a)
-    pos.push(Math.cos(a) * er, 0.0, Math.sin(a) * er)
-    col.push(cTop.r * 0.9, cTop.g * 0.9, cTop.b * 0.9)
-  }
-  for (let j = 0; j < segs; j++) idx.push(0, 1 + ((j + 1) % segs), 1 + j)
-  // 下半岩体
-  const base = 1 + segs
-  for (let i = 1; i <= rings; i++) {
-    const t = i / rings
+  for (let i = 0; i <= TR; i++) {
+    const u = Math.max(0.004, i / TR)
     for (let j = 0; j < segs; j++) {
       const a = (j / segs) * Math.PI * 2
-      const er = edgeR(a) * Math.pow(1 - t, 0.9) * (0.9 + 0.25 * fbm2(a * 3 + seed, t * 4, 3))
-      const y = -t * depth * r * (0.85 + 0.3 * fbm2(a * 2 + seed * 3, 1.3, 3))
-      pos.push(Math.cos(a) * er, y, Math.sin(a) * er)
-      const c = cRock.clone().lerp(cBot, t)
-      if (i === 1) c.lerp(cTop, 0.4)
-      col.push(c.r, c.g, c.b)
+      const er = edgeR(a) * u
+      const x = Math.cos(a) * er, z = Math.sin(a) * er
+      const bump = fbm2(x / r * 3 + seed, z / r * 3 - seed, 4)
+      const y = r * (0.07 * (1 - u * u) + 0.03 * (bump - 0.5))
+      const patch = 0.78 + 0.45 * fbm2(x / r * 6 - seed, z / r * 6, 3)
+      c.copy(cTop).multiplyScalar(patch)
+      push(x, y, z, c)
     }
   }
-  for (let i = 0; i < rings; i++) {
-    const r0 = i === 0 ? 1 : base + (i - 1) * segs
-    const r1 = base + i * segs
+  // 草皮外挑的唇口
+  for (let j = 0; j < segs; j++) {
+    const a = (j / segs) * Math.PI * 2
+    const er = edgeR(a) * 1.025
+    c.copy(cTop).multiplyScalar(0.6)
+    push(Math.cos(a) * er, -0.02 * r, Math.sin(a) * er, c)
+  }
+  // 岩壁 → 尖底
+  for (let i = 1; i <= SR; i++) {
+    const t = i / SR
     for (let j = 0; j < segs; j++) {
-      const a = r0 + j, b = r0 + ((j + 1) % segs), c = r1 + j, e = r1 + ((j + 1) % segs)
-      idx.push(a, b, c, b, e, c)
+      const a = (j / segs) * Math.PI * 2
+      const lb = lobe(a)
+      const reach = depth * r * (0.62 + 0.55 * lb) * (0.9 + 0.2 * fbm2(a * 2 + seed * 3, 1.3, 3))
+      const y = -0.03 * r - t * reach
+      // 上段近乎直壁，下段收拢；越往下越按"股"分开
+      let prof = t < 0.14 ? 1 - t * 0.35 : Math.pow(1 - t, 0.9) * 1.06
+      prof *= 1 - Math.pow(t, 1.3) * (1 - (0.3 + 0.7 * lb)) * 0.85
+      const strataPh = y / (0.075 * r) + fbm2(a * 4 + seed, t * 2, 3) * 1.5
+      const f = strataPh - Math.floor(strataPh)
+      const strata = 0.03 * smooth01((f - 0.6) / 0.3)
+      const groove = 0.07 * (1 - Math.abs(fbm2(a * 16 + seed, y / r * 3, 4) * 2 - 1))
+      const er = edgeR(a) * prof * (1 + strata - groove * (0.4 + t))
+      const band = 0.82 + 0.3 * Math.sin(strataPh * Math.PI * 0.5 + seed) * 0.5 + 0.2 * fbm2(a * 9, y / r * 8, 3)
+      c.copy(cRock).lerp(cBot, Math.pow(t, 0.8)).multiplyScalar(band * (1 - groove * 2.5))
+      // 唇口下的青苔垂痕
+      const moss = (1 - smooth01(t / (0.12 + 0.25 * fbm2(a * 11 + seed, 3.3, 3)))) * 0.8
+      c.lerp(cTop.clone().multiplyScalar(0.55), moss)
+      push(Math.cos(a) * er, y, Math.sin(a) * er, c)
     }
   }
-  const tip = pos.length / 3
-  pos.push(0, -depth * r * 1.05, 0)
-  col.push(cBot.r, cBot.g, cBot.b)
-  const last = base + (rings - 1) * segs
-  for (let j = 0; j < segs; j++) idx.push(last + j, last + ((j + 1) % segs), tip)
+  const rows = TR + 1 + 1 + SR
+  for (let i = 0; i < rows - 1; i++) {
+    for (let j = 0; j < segs; j++) {
+      const j1 = (j + 1) % segs
+      const a = i * segs + j, b = i * segs + j1, d = (i + 1) * segs + j, e = (i + 1) * segs + j1
+      idx.push(a, b, d, b, e, d)
+    }
+  }
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
   g.setIndex(idx)
   g.computeVertexNormals()
+  g.userData.edgeR = edgeR // 按角度查岛沿半径（放瀑布、树用）
+  g.userData.topAt = (x, z) => r * 0.07 * (1 - Math.min(1, (x * x + z * z) / (r * r)))
   return g
 }
+
+// 在岛的岩壁/底面上随机长出一簇簇水晶（沿表面法线朝外、朝下）
+export function islandCrystals(geo, { count = 12, size = 1, material, seed = 1, below = 0.1 }) {
+  const R = rng(seed)
+  const p = geo.attributes.position, n = geo.attributes.normal
+  const out = new THREE.Group()
+  const up = new THREE.Vector3(0, 1, 0)
+  let tries = 0
+  while (out.children.length < count && tries++ < count * 200) {
+    const i = Math.floor(R() * p.count)
+    if (n.getY(i) > 0.2 || p.getY(i) > -below) continue
+    const pos = new THREE.Vector3().fromBufferAttribute(p, i)
+    const nor = new THREE.Vector3().fromBufferAttribute(n, i).add(new THREE.Vector3(0, -0.6, 0)).normalize()
+    const cluster = 2 + Math.floor(R() * 3)
+    for (let k = 0; k < cluster; k++) {
+      const h = size * (6 + R() * 14) * (k ? 0.6 : 1)
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(0, size * (1 + R() * 1.4) * (k ? 0.7 : 1), h, 6).translate(0, h / 2, 0), material)
+      const d = nor.clone().add(new THREE.Vector3((R() - 0.5) * 0.7, (R() - 0.5) * 0.4, (R() - 0.5) * 0.7)).normalize()
+      c.quaternion.setFromUnitVectors(up, d)
+      c.position.copy(pos).addScaledVector(nor, -size * 1.5)
+      out.add(c)
+    }
+  }
+  return out
+}
+
+const smooth01 = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x) }
 
 // ---------- 云团材质（实例化的球，软边 + 顶亮底暗 + 噪声起伏）----------
 export function cloudMaterial({ lit = [1.0, 0.85, 0.75], shade = [0.45, 0.42, 0.62], sunDir = [0.3, 0.4, -1], rim = [1.0, 0.7, 0.6], opacity = 1 } = {}) {
@@ -626,4 +677,116 @@ export function mistBank(blobs, { color = [0.5, 0.55, 0.7], maxPx = 320, additiv
   const pts = new THREE.Points(g, m)
   pts.frustumCulled = false
   return pts
+}
+
+// ---------- 体积感云（面向镜头的广告牌 + 球面法线打光 + 噪声侵蚀边缘，每帧按深度排序）----------
+// blobs = [{ pos: Vector3, size: 直径, flat: 纵向压扁比例 }]
+export function billboardClouds(blobs, { lit = [1, 0.9, 0.85], shade = [0.4, 0.38, 0.6], rim = [1, 0.7, 0.5], sunDir = [0, 0.3, -1], opacity = 1 } = {}) {
+  const n = blobs.length
+  const offset = new Float32Array(n * 3)
+  const size = new Float32Array(n * 2)
+  const seed = new Float32Array(n)
+  const geo = new THREE.PlaneGeometry(1, 1)
+  const aOffset = new THREE.InstancedBufferAttribute(offset, 3)
+  const aSize = new THREE.InstancedBufferAttribute(size, 2)
+  const aSeed = new THREE.InstancedBufferAttribute(seed, 1)
+  for (const a of [aOffset, aSize, aSeed]) a.setUsage(THREE.DynamicDrawUsage)
+  geo.setAttribute('aOffset', aOffset)
+  geo.setAttribute('aSize', aSize)
+  geo.setAttribute('aSeed', aSeed)
+  const sun = new THREE.Vector3(...sunDir).normalize()
+  const uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
+    uLit: { value: new THREE.Color(...lit) },
+    uShade: { value: new THREE.Color(...shade) },
+    uRim: { value: new THREE.Color(...rim) },
+    uSunView: { value: new THREE.Vector3() },
+    uTime: { value: 0 },
+    uOpacity: { value: opacity },
+    uGlow: { value: 0 },
+  }])
+  const mat = new THREE.ShaderMaterial({
+    uniforms,
+    fog: true,
+    transparent: true,
+    depthWrite: false,
+    vertexShader: /* glsl */ `
+      attribute vec3 aOffset;
+      attribute vec2 aSize;
+      attribute float aSeed;
+      varying vec2 vUv;
+      varying float vSeed;
+      #include <fog_pars_vertex>
+      void main() {
+        vec4 mvPosition = viewMatrix * vec4(aOffset, 1.0);
+        mvPosition.xy += position.xy * aSize;
+        vUv = uv;
+        vSeed = aSeed;
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uLit, uShade, uRim, uSunView;
+      uniform float uTime, uOpacity, uGlow;
+      varying vec2 vUv;
+      varying float vSeed;
+      #include <fog_pars_fragment>
+      ${GLSL_NOISE}
+      void main() {
+        vec2 d = vUv * 2.0 - 1.0;
+        float r = length(d);
+        float n = fbm(vUv * 2.4 + vSeed * 13.0 + uTime * 0.008);
+        float n2 = fbm(vUv * 6.5 + vSeed * 7.0 - uTime * 0.01);
+        float edge = r + (n - 0.5) * 0.6 + (n2 - 0.5) * 0.22;
+        float a = smoothstep(1.0, 0.5, edge);
+        if (a < 0.01) discard;
+        vec3 N = normalize(vec3(d * 1.05, sqrt(max(0.03, 1.0 - r * r))));
+        float ndl = dot(N, uSunView);
+        float light = smoothstep(-0.5, 0.95, ndl + (n - 0.5) * 0.7 + (n2 - 0.5) * 0.3);
+        vec3 col = mix(uShade, uLit, light);
+        float back = max(0.0, -uSunView.z);
+        col += uRim * pow(1.0 - N.z, 2.5) * back * 0.9;
+        col += uRim * uGlow;
+        gl_FragColor = vec4(col, a * uOpacity);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+        #include <fog_fragment>
+      }
+    `,
+  })
+  const mesh = new THREE.InstancedMesh(geo, mat, n)
+  mesh.frustumCulled = false
+  const order = blobs.map((_, i) => i)
+  const depth = new Float32Array(n)
+  const fwd = new THREE.Vector3()
+  const write = () => {
+    order.forEach((bi, k) => {
+      const b = blobs[bi]
+      offset[k * 3] = b.pos.x
+      offset[k * 3 + 1] = b.pos.y
+      offset[k * 3 + 2] = b.pos.z
+      size[k * 2] = b.size
+      size[k * 2 + 1] = b.size * (b.flat ?? 0.8)
+      seed[k] = (bi * 0.6180339) % 1
+    })
+    aOffset.needsUpdate = aSize.needsUpdate = aSeed.needsUpdate = true
+  }
+  write()
+  return {
+    mesh,
+    material: mat,
+    // 每帧：更新太阳在视空间的方向，按远到近排序
+    update(camera, t) {
+      uniforms.uTime.value = t
+      uniforms.uSunView.value.copy(sun).transformDirection(camera.matrixWorldInverse)
+      camera.getWorldDirection(fwd)
+      const cp = camera.position
+      for (let i = 0; i < n; i++) {
+        const p = blobs[i].pos
+        depth[i] = (p.x - cp.x) * fwd.x + (p.y - cp.y) * fwd.y + (p.z - cp.z) * fwd.z
+      }
+      order.sort((a, b) => depth[b] - depth[a])
+      write()
+    },
+  }
 }

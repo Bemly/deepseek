@@ -4,11 +4,12 @@ import { rng, fbm2, WATER_Y, canvasTexture, glowPointMaterial, bakeStatic, clamp
 import { woodTexture } from '../textures.js'
 import { createWhales } from '../whales.js'
 import { createParticles } from '../particles.js'
-import { mountainRing, rock } from '../landscape.js'
+import { mountainRing, shoreRock, shoreRockMaterial } from '../landscape.js'
 import {
   createLightRig, beamMaterial, beamGeometry, createBuildingMaterial, updateBuildingUniforms, instancedBuildings,
   curvedRoofGeometry, pagoda, mistBank,
 } from '../kit.js'
+import { createTree, forestSprites, meadow, scatterOnTop } from '../trees.js'
 
 // 主题：和风群 —— 樱花满开的月夜湖畔
 // 近景：严岛式海上大鸟居 + 桧木舞台（朱红高栏、提灯、石灯笼）、太鼓、野点伞与团子、太鼓桥、樱花树
@@ -87,39 +88,6 @@ function toriiGeometry() {
   return mergeGeometries(parts.map((g) => (g.deleteAttribute('uv'), g.toNonIndexed())))
 }
 
-// 樱花树：弯曲的树干 + 若干分枝 + 一团团花簇
-function sakuraTree(R, { height = 40, spread = 30, blossoms = 160, trunkMat, blossomMat }) {
-  const g = new THREE.Group()
-  const branchTips = []
-  const trunk = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(1.5, height * 0.3, 0.5), new THREE.Vector3(-1, height * 0.55, -0.5), new THREE.Vector3(0.5, height * 0.7, 0)])
-  g.add(new THREE.Mesh(new THREE.TubeGeometry(trunk, 24, height * 0.045, 8), trunkMat))
-  for (let b = 0; b < 11; b++) {
-    const a = (b / 11) * Math.PI * 2 + R() * 0.6
-    const start = trunk.getPoint(0.45 + R() * 0.4)
-    const len = spread * (0.45 + R() * 0.35)
-    const mid = start.clone().add(new THREE.Vector3(Math.cos(a) * len * 0.5, height * 0.12, Math.sin(a) * len * 0.5))
-    const end = start.clone().add(new THREE.Vector3(Math.cos(a) * len, height * 0.18 + (R() - 0.3) * height * 0.15, Math.sin(a) * len))
-    const curve = new THREE.CatmullRomCurve3([start, mid, end])
-    g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 12, height * 0.018, 6), trunkMat))
-    branchTips.push(curve)
-  }
-  const blob = new THREE.IcosahedronGeometry(1, 2)
-  const im = new THREE.InstancedMesh(blob, blossomMat, blossoms)
-  const m = new THREE.Matrix4()
-  const c = new THREE.Color()
-  for (let i = 0; i < blossoms; i++) {
-    const curve = branchTips[i % branchTips.length]
-    const p = curve.getPoint(0.35 + R() * 0.65).add(new THREE.Vector3((R() - 0.5) * spread * 0.35, (R() - 0.2) * height * 0.18, (R() - 0.5) * spread * 0.35))
-    const s = height * (0.028 + R() * 0.035)
-    m.compose(p, new THREE.Quaternion().setFromEuler(new THREE.Euler(R() * 6, R() * 6, R() * 6)), new THREE.Vector3(s, s * 0.75, s))
-    im.setMatrixAt(i, m)
-    const k = R()
-    im.setColorAt(i, k < 0.15 ? c.setRGB(1.0, 0.95, 0.97) : c.setRGB(1.0, 0.62 + k * 0.25, 0.78 + k * 0.15))
-  }
-  g.add(im)
-  return g
-}
-
 export function createJapanTheme() {
   const root = new THREE.Group()
   root.name = 'theme:japan'
@@ -132,12 +100,9 @@ export function createJapanTheme() {
   const blackLac = new THREE.MeshPhysicalMaterial({ color: 0x111012, roughness: 0.3, clearcoat: 0.8 })
   const gold = new THREE.MeshStandardMaterial({ color: 0xd8a84e, metalness: 1, roughness: 0.3 })
   const stone = new THREE.MeshStandardMaterial({ color: 0x8a877f, roughness: 0.9 })
-  const darkStone = new THREE.MeshStandardMaterial({ color: 0x3c3a38, roughness: 0.95, flatShading: true })
   const roofCu = new THREE.MeshStandardMaterial({ color: 0x2c3a38, roughness: 0.6, metalness: 0.3 })
   const roofTile = new THREE.MeshStandardMaterial({ color: 0x1e2026, roughness: 0.8 })
   const plaster = new THREE.MeshStandardMaterial({ color: 0xe9e6de, roughness: 0.8, emissive: 0x2a3550, emissiveIntensity: 0.6 })
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x2a1c18, roughness: 0.95 })
-  const blossomMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.75, emissive: 0x5a2238, emissiveIntensity: 0.55 })
   const lanternFire = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 1.3, 0.55) })
 
   // ---------- 近景：桧木舞台 ----------
@@ -473,13 +438,22 @@ export function createJapanTheme() {
 
   // 樱花树（舞台两侧的小岩岛上 + 背后一棵大的）
   const trees = []
-  for (const [x, z, h, sp] of [[-56, -18, 42, 34], [58, -24, 46, 36], [-76, -70, 60, 48], [82, -62, 52, 40]]) {
-    const isle = new THREE.Mesh(rock(16 + h * 0.2, x * 0.01, 0.4, 2), darkStone)
+  const isleMat = shoreRockMaterial()
+  for (const [x, z, h, type, sd] of [[-58, -18, 46, 'sakura', 3], [60, -24, 50, 'sakura', 7], [-84, -74, 64, 'sakura', 11], [88, -66, 56, 'sakura', 13], [-50, 30, 30, 'pine', 5], [54, 34, 26, 'pine', 9]]) {
+    const geo = shoreRock(14 + h * 0.22, sd * 1.7, { flat: 0.32, waterline: 1 })
+    const isle = new THREE.Mesh(geo, isleMat)
     isle.position.set(x, WATER_Y - 1, z)
+    isle.rotation.y = sd
+    isle.receiveShadow = true
     stage.add(isle)
-    const tr = sakuraTree(R, { height: h, spread: sp, blossoms: 1100, trunkMat, blossomMat })
-    tr.position.set(x, WATER_Y + 3, z)
-    tr.userData.dynamic = true
+    // 岩顶的苔草
+    const moss = meadow(scatterOnTop(geo, { count: 700, minUp: 0.7, minY: 3, seed: sd }), { size: 2.2, seed: sd + 1, tint: [0.7, 0.8, 0.75], flowers: [0.7, 0.2, 0.1, 0] })
+    moss.position.copy(isle.position)
+    moss.rotation.y = isle.rotation.y
+    stage.add(moss)
+    const tr = createTree(type, { seed: sd, height: h, glow: type === 'sakura' ? 0.22 : 0 })
+    tr.position.set(x, WATER_Y - 1 + geo.userData.top - 0.6, z)
+    tr.rotation.y = sd * 2.1
     stage.add(tr)
     trees.push(tr)
   }
@@ -660,35 +634,21 @@ export function createJapanTheme() {
     endpoints.push({ pos: shrine.position.clone().add(new THREE.Vector3(0, 140, 0)), index: -1 })
     lamps.push([shrine.position.clone().add(new THREE.Vector3(0, 40, 60)), 60, [1.0, 0.55, 0.25]])
   }
-  // 樱花林：山坡上成片的粉色树冠
-  {
-    const blob = new THREE.IcosahedronGeometry(1, 1)
-    const list = []
-    for (let i = 0; i < 9000; i++) {
-      const x = -12000 + R() * 24000
-      const zs = shoreZ(x)
-      const z = zs - 200 - Math.pow(R(), 0.8) * 9000
-      const y = groundY(x, z)
-      const onHill = y > WATER_Y + 120 || R() < 0.25
-      if (!onHill) continue
-      if (fbm2(x / 1500, z / 1500, 3) < 0.46) continue
-      list.push({ x, y, z, s: 22 + R() * 30, pine: R() < 0.22 })
-    }
-    const sak = list.filter((l) => !l.pine), pin = list.filter((l) => l.pine)
-    const mkForest = (arr, mat) => {
-      const im = new THREE.InstancedMesh(blob, mat, arr.length)
-      const c = new THREE.Color()
-      arr.forEach((l, i) => {
-        im.setMatrixAt(i, new THREE.Matrix4().compose(new THREE.Vector3(l.x, l.y + l.s * 0.8, l.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(R(), R() * 6, R())), new THREE.Vector3(l.s * 1.3, l.s, l.s * 1.3)))
-        const k = R()
-        im.setColorAt(i, l.pine ? c.setRGB(0.5 + k * 0.2, 0.8, 0.6) : c.setRGB(1, 0.72 + k * 0.18, 0.85 + k * 0.1))
-      })
-      im.frustumCulled = false
-      town.add(im)
-    }
-    mkForest(sak, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, emissive: 0x3a1624, emissiveIntensity: 0.9, flatShading: true }))
-    mkForest(pin, new THREE.MeshStandardMaterial({ color: 0x1a2e22, roughness: 0.9, flatShading: true }))
+  // 樱花林：山坡上成片的樱、松、柏（手绘剪影精灵，远看像真的树林）
+  const forestList = []
+  for (let i = 0; i < 16000; i++) {
+    const x = -12000 + R() * 24000
+    const zs = shoreZ(x)
+    const z = zs - 150 - Math.pow(R(), 0.8) * 9500
+    const y = groundY(x, z)
+    const onHill = y > WATER_Y + 100 || R() < 0.3
+    if (!onHill) continue
+    if (fbm2(x / 1500, z / 1500, 3) < 0.44) continue
+    const k = R()
+    forestList.push({ pos: new THREE.Vector3(x, y - 4, z), size: 50 + R() * 50, kind: k < 0.6 ? 'sakura' : k < 0.85 ? 'pine' : 'cypress' })
   }
+  const forest = forestSprites(forestList, { tint: [0.55, 0.5, 0.62], glow: 0.35, glowColor: [0.9, 0.45, 0.65] })
+  root.add(forest)
   bakeStatic(town)
   root.add(town)
 
@@ -709,26 +669,38 @@ export function createJapanTheme() {
 
   // ---------- 远景：富士山 + 山脊 ----------
   {
+    // 富士山：细分的旋转体 + 放射状冲沟起伏；雪线沿冲沟向下拉出一道道雪痕，边缘柔和过渡
     const prof = []
-    for (let i = 0; i <= 40; i++) {
-      const u = i / 40
+    for (let i = 0; i <= 120; i++) {
+      const u = i / 120
       const r = 17000 * Math.pow(1 - u, 1.6) + 900 * (1 - u)
       prof.push(new THREE.Vector2(Math.max(r, 700), u * 8200))
     }
-    prof.push(new THREE.Vector2(0, 8200))
-    const geo = new THREE.LatheGeometry(prof, 96)
+    prof.push(new THREE.Vector2(0, 8150))
+    const geo = new THREE.LatheGeometry(prof, 360)
     const p = geo.attributes.position
     const col = []
+    const L = new THREE.Vector3(...MOON).normalize()
     for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i), y = p.getY(i), z = p.getZ(i)
+      let x = p.getX(i), y = p.getY(i), z = p.getZ(i)
       const a = Math.atan2(z, x)
-      const snowLine = 5200 + 700 * Math.sin(a * 9) + 400 * Math.sin(a * 23)
-      const snow = y > snowLine ? 1 : 0
-      const lit = 0.5 + 0.5 * Math.max(0, (x * 0.6 + z * -0.2) / Math.hypot(x, z) || 0)
-      const base = [0.05 + lit * 0.03, 0.05 + lit * 0.03, 0.1 + lit * 0.05]
-      const sn = [0.55 + lit * 0.35, 0.58 + lit * 0.32, 0.72 + lit * 0.25]
-      col.push(...(snow ? sn : base))
+      const rr = Math.hypot(x, z)
+      const u = y / 8200
+      // 冲沟：高频的放射状沟脊，越往山腰越深
+      const gully = Math.pow(Math.abs(Math.sin(a * 23 + fbm2(a * 3, u * 4, 3) * 4)), 3)
+      const ridge = 1 - gully
+      const k = 1 - 0.018 * gully * Math.sin(Math.PI * Math.min(1, u * 1.15))
+      if (rr > 1) { x *= k; z *= k; p.setX(i, x); p.setZ(i, z) }
+      const snowLine = 5000 + 650 * Math.sin(a * 5 + 1) + 500 * fbm2(a * 6, 1.3, 4) - 2600 * Math.pow(gully, 6) * (0.4 + 0.6 * fbm2(a * 11, 7.7, 3))
+      const snow = THREE.MathUtils.smoothstep(y, snowLine - 160, snowLine + 160)
+      // 朝向月光的一面亮
+      const nx = x / Math.max(rr, 1), nz = z / Math.max(rr, 1)
+      const lit = Math.max(0, nx * L.x * 0.85 + nz * L.z * 0.85 + 0.45) * (0.85 + 0.15 * ridge)
+      const base = [0.045 + lit * 0.04, 0.045 + lit * 0.04, 0.085 + lit * 0.06].map((c) => c * (0.8 + 0.4 * u))
+      const sn = [0.42 + lit * 0.42, 0.45 + lit * 0.4, 0.6 + lit * 0.32]
+      col.push(...base.map((c, j) => c + (sn[j] - c) * snow))
     }
+    geo.computeVertexNormals()
     geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
     const fuji = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }))
     fuji.position.set(-6000, WATER_Y - 200, -36000)
@@ -819,7 +791,7 @@ export function createJapanTheme() {
       chGeo.attributes.aAlpha.needsUpdate = true
       lanternFire.color.setRGB(2.2 * alive, 1.3 * alive, 0.55 * alive)
       lampMat.uniforms.uFade.value = (0.3 + 0.7 * Math.min(1, state.city * 1.2 + state.neon * 0.3)) * alive
-      blossomMat.emissiveIntensity = 0.6 + 0.3 * state.pulse + 0.4 * state.neon
+      forest.material.uniforms.uGlow.value = (0.25 + 0.25 * state.neon + 0.15 * state.pulse) * alive
       const phase = (Math.PI * state.beat) / 2
       beams.forEach((b, i) => {
         b.rotation.set(-0.45, 0, (i - 0.5) * 0.3 + (i ? -1 : 1) * state.swing * 0.2 * Math.cos(phase + i))
@@ -831,7 +803,6 @@ export function createJapanTheme() {
         s.target.position.set(Math.sin(phase + i * 2) * 14 * state.swing, 0, 0)
       })
       rig.rim.intensity = rig.base.rim * (1 - 0.5 * hush)
-      trees.forEach((tr, i) => (tr.rotation.z = Math.sin(t * 0.6 + i) * 0.012))
       mist.material.uniforms.uTime.value = t
       whales.update(state)
       particles.update(state)
@@ -839,6 +810,7 @@ export function createJapanTheme() {
     setPixelRatio(pr) {
       particles.setPixelRatio(pr)
       mist.material.uniforms.uPixelRatio.value = pr
+      forest.material.uniforms.uPixelRatio.value = pr
     },
   }
 }

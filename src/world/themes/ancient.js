@@ -1,9 +1,10 @@
 import * as THREE from 'three'
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js'
 import { rng, fbm2, WATER_Y, canvasTexture, glowPointMaterial, bakeStatic, clamp01 } from '../util.js'
 import { createWhales } from '../whales.js'
 import { createParticles } from '../particles.js'
-import { rock } from '../landscape.js'
+import { shoreRock, shoreRockMaterial } from '../landscape.js'
+import { createTree, forestSprites, meadow } from '../trees.js'
 import {
   createLightRig, beamMaterial, beamGeometry, createBuildingMaterial, updateBuildingUniforms, instancedBuildings,
   curvedRoofGeometry, roofRidgeGeometry, pagoda, floatingIslandGeometry, waterfallMaterial, mistBank,
@@ -477,27 +478,34 @@ export function createAncientTheme() {
     ding.position.set(30, 0, 2)
     stage.add(ding)
 
-    const pine = (x, z) => {
+    // 盆景黑松：青花瓷盆 + 程序化松树（盆面铺苔）
+    const pine = (x, z, seed) => {
       const g = new THREE.Group()
-      const pot = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 2.4, 3, 24), new THREE.MeshPhysicalMaterial({ color: 0xe9eef7, roughness: 0.25, clearcoat: 1 }))
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 2.4, 3, 48), new THREE.MeshPhysicalMaterial({ color: 0xe9eef7, roughness: 0.25, clearcoat: 1 }))
       pot.position.y = 1.5
       g.add(pot)
-      const band = new THREE.Mesh(new THREE.CylinderGeometry(3.25, 3.1, 0.8, 24, 1, true), new THREE.MeshStandardMaterial({ color: 0x2c55a8, roughness: 0.4 }))
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(3.25, 3.1, 0.8, 48, 1, true), new THREE.MeshStandardMaterial({ color: 0x2c55a8, roughness: 0.4 }))
       band.position.y = 2.2
       g.add(band)
-      const trunk = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(0, 3, 0), new THREE.Vector3(1.2, 6, 0.4), new THREE.Vector3(-0.6, 9, -0.3), new THREE.Vector3(1.5, 12, 0.5)]), 20, 0.45, 6)
-      g.add(new THREE.Mesh(trunk, new THREE.MeshStandardMaterial({ color: 0x3a2618, roughness: 0.95 })))
-      const needles = new THREE.MeshStandardMaterial({ color: 0x1f4a2a, roughness: 0.9 })
-      for (const [px, py, pz, s] of [[2.4, 7.5, 0.6, 2.4], [-2, 10, 0, 2.1], [2.6, 12.3, 0.4, 2.3], [0.2, 13.4, 0, 1.6]]) {
-        const pad = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8).scale(s * 1.5, s * 0.45, s), needles)
-        pad.position.set(px, py, pz)
-        g.add(pad)
+      const soil = new THREE.Mesh(new THREE.CircleGeometry(3.0, 48).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x1c2414, roughness: 1 }))
+      soil.position.y = 2.85
+      g.add(soil)
+      const mossPts = []
+      const MR = rng(seed * 13)
+      for (let k = 0; k < 160; k++) {
+        const a = MR() * Math.PI * 2, d = Math.sqrt(MR()) * 2.8
+        mossPts.push({ pos: new THREE.Vector3(Math.cos(a) * d, 2.85, Math.sin(a) * d) })
       }
+      g.add(meadow(mossPts, { size: 0.5, seed, tint: [0.7, 0.9, 0.6], flowers: [1, 0, 0, 0.1] }))
+      const tree = createTree('pine', { seed, height: 13 })
+      tree.position.y = 2.9
+      tree.rotation.y = seed
+      g.add(tree)
       g.position.set(x, 0, z)
       stage.add(g)
     }
-    pine(-37, -24)
-    pine(37, -24)
+    pine(-37, -24, 3)
+    pine(37, -24, 8)
   }
 
   // 荷叶 + 荷花（舞台周围的水面）
@@ -535,6 +543,79 @@ export function createAncientTheme() {
 
   bakeStatic(stage)
   root.add(stage)
+
+  // ---------- 柳堤：从露台两侧斜伸向城的两条长堤，"一株杨柳一株桃"（西湖苏堤的种法）----------
+  const dikeLamps = []
+  {
+    const dike = new THREE.Group()
+    const stone = new THREE.MeshStandardMaterial({ color: 0x6d6a64, roughness: 0.9 })
+    const turf = new THREE.MeshStandardMaterial({ color: 0x1a2a16, roughness: 1 })
+    const path = new THREE.MeshStandardMaterial({ color: 0x8a8272, roughness: 0.85 })
+    const W = 34, TOP = WATER_Y + 3.5
+    let seed = 40
+    for (const [ax, az, bx, bz] of [[-86, -46, -760, -1650], [92, -52, 820, -1600]]) {
+      const len = Math.hypot(bx - ax, bz - az)
+      const yaw = Math.atan2(bx - ax, bz - az)
+      const g = new THREE.Group()
+      // 石砌护岸：梯形截面沿长度挤出
+      const sec = new THREE.Shape([new THREE.Vector2(-W / 2 - 5, -7), new THREE.Vector2(-W / 2, 0), new THREE.Vector2(W / 2, 0), new THREE.Vector2(W / 2 + 5, -7)])
+      const bank = new THREE.Mesh(new THREE.ExtrudeGeometry(sec, { depth: len, bevelEnabled: false, steps: 1 }), stone)
+      bank.position.y = TOP - 0.3
+      g.add(bank)
+      const lawn = new THREE.Mesh(new THREE.PlaneGeometry(W, len).rotateX(-Math.PI / 2).translate(0, 0, len / 2), turf)
+      lawn.position.y = TOP
+      g.add(lawn)
+      const walk = new THREE.Mesh(new THREE.PlaneGeometry(9, len).rotateX(-Math.PI / 2).translate(0, 0, len / 2), path)
+      walk.position.y = TOP + 0.08
+      walk.receiveShadow = true
+      g.add(walk)
+      // 草
+      const DR = rng(seed)
+      const grassPts = []
+      for (let k = 0; k < len * 5; k++) {
+        const x = (DR() - 0.5) * W
+        if (Math.abs(x) < 5.5) continue
+        grassPts.push({ pos: new THREE.Vector3(x, TOP, DR() * len) })
+      }
+      g.add(meadow(grassPts, { size: 2.2, seed: seed + 1, tint: [0.75, 0.85, 0.7], flowers: [0.7, 0.12, 0.1, 0.08] }))
+      // 树：左右交替，杨柳与桃花相间
+      const lampStart = dikeLamps.length
+      let k = 0
+      for (let z = 30; z < len - 20; z += 52 + DR() * 14, k++) {
+        const side = k % 2 ? 1 : -1
+        const willow = Math.floor(k / 2) % 2 === 0
+        const x = side * (W / 2 - 6 - DR() * 3)
+        const h = willow ? 54 + DR() * 16 : 30 + DR() * 8
+        const tr = willow
+          ? createTree('willow', { seed: seed * 7 + k, height: h })
+          : createTree('sakura', { seed: seed * 7 + k, height: h, tint: [1.05, 0.7, 0.82], glow: 0.18, glowColor: 0xff8fb0 })
+        tr.position.set(x, TOP - 0.4, z)
+        tr.rotation.y = DR() * 6
+        g.add(tr)
+        // 石灯笼（每隔一株）
+        if (k % 2 === 0) {
+          const lamp = new THREE.Group()
+          const base = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.1, 3.6, 8), stone)
+          base.position.y = 1.8
+          const box = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.8, 2.2), new THREE.MeshStandardMaterial({ color: 0x3a2a18, emissive: 0xffa040, emissiveIntensity: 1.6 }))
+          box.position.y = 4.5
+          const cap = new THREE.Mesh(new THREE.ConeGeometry(2.2, 1.4, 4).rotateY(Math.PI / 4), stone)
+          cap.position.y = 6.1
+          lamp.add(base, box, cap)
+          lamp.position.set(-side * 6.2, TOP, z + 8)
+          g.add(lamp)
+          dikeLamps.push(new THREE.Vector3(-side * 6.2, TOP + 4.5, z + 8))
+        }
+      }
+      g.position.set(ax, 0, az)
+      g.rotation.y = yaw
+      g.updateMatrixWorld(true)
+      for (let i = lampStart; i < dikeLamps.length; i++) dikeLamps[i].applyMatrix4(g.matrixWorld)
+      dike.add(g)
+      seed += 11
+    }
+    root.add(dike)
+  }
 
   // ---------- 光柱：月光从牌坊后斜照下来，副歌时摆动 ----------
   const beams = []
@@ -652,6 +733,22 @@ export function createAncientTheme() {
   }
   const houseSet = instancedBuildings(houses, houseMat, R, { neon: [[1, 0.5, 0.2]], density: [0.4, 0.85] })
   city.add(houseSet.mesh)
+  // 院落和街边的树（剪影精灵）：槐、柏、松；岸边一排
+  {
+    const TR = rng(91)
+    const tl = []
+    for (let i = 0; i < 7000; i++) {
+      const x = (TR() - 0.5) * 22400, z = wallZ(x) - 150 - Math.pow(TR(), 0.8) * 13000
+      if (Math.abs(x) < 1700 && z < -5600 && z > -10400 && TR() < 0.6) continue
+      const k = TR()
+      tl.push({ pos: new THREE.Vector3(x, groundY(x, z) - 4, z), size: 55 + TR() * 55, kind: k < 0.6 ? 'broadleaf' : k < 0.85 ? 'cypress' : 'pine' })
+    }
+    for (let x = -11000; x < 11000; x += 38 + TR() * 30) {
+      const z = shoreZ(x) - 40 - TR() * 60
+      tl.push({ pos: new THREE.Vector3(x, groundY(x, z) - 3, z), size: 60 + TR() * 30, kind: 'broadleaf' })
+    }
+    city.add(forestSprites(tl, { tint: [0.32, 0.36, 0.42] }))
+  }
   ASPECTS.forEach((asp, ai) => {
     const list = roofSlots[ai]
     const geo = curvedRoofGeometry({ w: asp, d: 1, rise: 1, overhang: 0.18, curl: 0.35, sag: 1.6, thick: 0.05, segs: 10 })
@@ -741,7 +838,7 @@ export function createAncientTheme() {
     lastPier.position.set(x1, WATER_Y + (hump(x1) + 12) / 2 - 12, bz)
     bridge.add(lastPier)
     city.add(bridge)
-    const isle = new THREE.Mesh(rock(260, 5.1, 0.25, 3), new THREE.MeshStandardMaterial({ color: 0x1c1f1c, roughness: 0.95, flatShading: true }))
+    const isle = new THREE.Mesh(shoreRock(260, 5.1, { flat: 0.25, waterline: 20, detail: 40, stone: [0.14, 0.13, 0.13], moss: [0.05, 0.08, 0.04] }), shoreRockMaterial())
     isle.position.set(-1850, WATER_Y - 20, -1500)
     city.add(isle)
     const pav = new THREE.Group()
@@ -768,32 +865,33 @@ export function createAncientTheme() {
   bakeStatic(city)
   root.add(city)
 
-  // 城墙灯 + 檐角灯（Points）
-  const lampGeo = new THREE.BufferGeometry()
-  const allLamps = [...wallLights.map((p) => [p, 18, [1.0, 0.45, 0.15]]), ...eaveLights.map((p) => [p, 22, [1.0, 0.6, 0.25]])]
-  lampGeo.setAttribute('position', new THREE.Float32BufferAttribute(allLamps.flatMap(([p]) => p.toArray()), 3))
-  lampGeo.setAttribute('aSize', new THREE.Float32BufferAttribute(allLamps.map(([, s]) => s), 1))
-  lampGeo.setAttribute('aColor', new THREE.Float32BufferAttribute(allLamps.flatMap(([, , c]) => c.map((v) => v * 1.6)), 3))
-  lampGeo.setAttribute('aAlpha', new THREE.Float32BufferAttribute(allLamps.map(() => 1), 1))
-  const lampMat = glowPointMaterial({ size: 1, maxSize: 30 })
-  root.add(new THREE.Points(lampGeo, lampMat))
-
   // ---------- 远景：喀斯特群峰 + 仙山浮岛 + 云带 ----------
   {
     const peaks = new THREE.Group()
     // 喀斯特峰林：粗壮的柱身 + 圆顶，而不是尖锥
-    const coneGeo = mergeGeometries([
-      new THREE.CylinderGeometry(0.42, 1, 0.82, 12, 6).translate(0, -0.09, 0).toNonIndexed(),
-      new THREE.SphereGeometry(0.42, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.55, 1).translate(0, 0.32, 0).toNonIndexed(),
+    let coneGeo = mergeGeometries([
+      new THREE.CylinderGeometry(0.42, 1, 0.82, 96, 48, true).translate(0, -0.09, 0),
+      new THREE.SphereGeometry(0.42, 96, 16, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.55, 1).translate(0, 0.32, 0),
     ])
+    coneGeo.deleteAttribute('uv')
+    coneGeo.deleteAttribute('normal')
+    coneGeo = mergeVertices(coneGeo, 1e-3)
     const cp = coneGeo.attributes.position
+    const kc = []
     for (let i = 0; i < cp.count; i++) {
       const y = cp.getY(i) + 0.5
       const a = Math.atan2(cp.getZ(i), cp.getX(i))
-      const s = 1 + 0.18 * Math.sin(y * 11 + a * 3) + 0.12 * Math.sin(a * 5 + y * 3)
+      // 大的起伏 + 竖向溶蚀沟（喀斯特峰特有的一道道竖纹）+ 水平的岩层
+      const flute = Math.pow(Math.abs(Math.sin(a * 17 + fbm2(a * 2, y * 3, 3) * 3)), 0.6)
+      const s = (1 + 0.18 * Math.sin(y * 11 + a * 3) + 0.12 * Math.sin(a * 5 + y * 3)) * (1 - 0.05 * flute) * (1 + 0.025 * Math.sin(y * 60))
       cp.setX(i, cp.getX(i) * s)
       cp.setZ(i, cp.getZ(i) * s)
+      // 颜色：底部暗、顶部和台阶上有植被的灰绿
+      const veg = clamp01((y - 0.35) * 1.6) * (0.5 + 0.5 * fbm2(a * 4, y * 6, 3))
+      const shade = 0.75 + 0.35 * (1 - flute) * 0.6
+      kc.push((0.11 + veg * -0.02) * shade, (0.12 + veg * 0.04) * shade, (0.16 - veg * 0.03) * shade)
     }
+    coneGeo.setAttribute('color', new THREE.Float32BufferAttribute(kc, 3))
     coneGeo.computeVertexNormals()
     const list = []
     for (let i = 0; i < 160; i++) {
@@ -804,7 +902,7 @@ export function createAncientTheme() {
       const h = 1600 + R() * 3000 * (d / 30000 + 0.4)
       list.push({ x, z, h, r: h * (0.26 + R() * 0.14) })
     }
-    const im = new THREE.InstancedMesh(coneGeo, new THREE.MeshStandardMaterial({ color: 0x1b1f2c, roughness: 1, flatShading: true }), list.length)
+    const im = new THREE.InstancedMesh(coneGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), list.length)
     list.forEach((p, i) => im.setMatrixAt(i, new THREE.Matrix4().compose(new THREE.Vector3(p.x, WATER_Y + p.h / 2 - 60, p.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), R() * 6), new THREE.Vector3(p.r, p.h, p.r))))
     peaks.add(im)
     // 几座峰顶小庙的灯
@@ -815,17 +913,28 @@ export function createAncientTheme() {
   const falls = []
   const fallMat = waterfallMaterial([0.85, 0.9, 1.0])
   {
-    const islandMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true })
+    const islandMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 })
     const defs = [[-7800, 5200, -15800, 700], [7400, 6000, -17800, 900], [-1200, 7600, -23500, 1100], [13500, 4600, -12400, 520], [-14200, 4200, -11200, 480]]
     defs.forEach(([x, y, z, r], i) => {
       const g = new THREE.Group()
-      const m = new THREE.Mesh(floatingIslandGeometry({ r, depth: 1.1, seed: i * 3.1 + 1, top: [0.2, 0.32, 0.2], rock: [0.3, 0.27, 0.3], bottom: [0.08, 0.08, 0.12] }), islandMat)
+      const geo = floatingIslandGeometry({ r, depth: 1.1, seed: i * 3.1 + 1, lobes: 2 + (i % 3), top: [0.08, 0.14, 0.07], rock: [0.3, 0.27, 0.3], bottom: [0.08, 0.08, 0.12] })
+      const m = new THREE.Mesh(geo, islandMat)
       g.add(m)
+      // 岛上的松林剪影
+      const IR = rng(i * 17 + 3)
+      const tl = []
+      for (let k = 0; k < 90; k++) {
+        const a = IR() * Math.PI * 2, d = Math.sqrt(IR()) * r * 0.85
+        tl.push({ pos: new THREE.Vector3(Math.cos(a) * d, geo.userData.topAt(Math.cos(a) * d, Math.sin(a) * d), Math.sin(a) * d), size: r * (0.1 + IR() * 0.08), kind: IR() < 0.7 ? 'pine' : 'cypress' })
+      }
+      g.add(forestSprites(tl, { tint: [0.5, 0.55, 0.6] }))
       const pv = hall({ w: r * 0.28, d: r * 0.2, h: r * 0.12, baseH: r * 0.03, tiers: 2, mats: { ...hallMats, roof: greenTile } })
       pv.position.set(r * 0.1, r * 0.05, -r * 0.1)
       g.add(pv)
       const fall = new THREE.Mesh(new THREE.PlaneGeometry(r * 0.12, r * 3.2), fallMat)
-      fall.position.set(r * 0.5, -r * 1.6, r * 0.55)
+      const fa = Math.atan2(0.55, 0.5)
+      const fr = geo.userData.edgeR(fa) * 1.02
+      fall.position.set(Math.cos(fa) * fr, -r * 1.6, Math.sin(fa) * fr)
       fall.lookAt(0, -r * 1.6, 3000)
       g.add(fall)
       falls.push(fall)
@@ -836,6 +945,16 @@ export function createAncientTheme() {
       eaveLights.push(new THREE.Vector3(x + r * 0.1, y + r * 0.22, z - r * 0.1 + r * 0.12))
     })
   }
+  // 城墙灯 + 檐角灯（Points）
+  const lampGeo = new THREE.BufferGeometry()
+  const allLamps = [...wallLights.map((p) => [p, 18, [1.0, 0.45, 0.15]]), ...eaveLights.map((p) => [p, 22, [1.0, 0.6, 0.25]]), ...dikeLamps.map((p) => [p, 6, [1.0, 0.62, 0.3]])]
+  lampGeo.setAttribute('position', new THREE.Float32BufferAttribute(allLamps.flatMap(([p]) => p.toArray()), 3))
+  lampGeo.setAttribute('aSize', new THREE.Float32BufferAttribute(allLamps.map(([, s]) => s), 1))
+  lampGeo.setAttribute('aColor', new THREE.Float32BufferAttribute(allLamps.flatMap(([, , c]) => c.map((v) => v * 1.6)), 3))
+  lampGeo.setAttribute('aAlpha', new THREE.Float32BufferAttribute(allLamps.map(() => 1), 1))
+  const lampMat = glowPointMaterial({ size: 1, maxSize: 30 })
+  root.add(new THREE.Points(lampGeo, lampMat))
+
   // 云雾：群峰山腰的雾带（大号柔光精灵，比实体云团自然）
   const mistBlobs = []
   for (let c = 0; c < 40; c++) {

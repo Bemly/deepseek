@@ -4,6 +4,7 @@ import { createSky, MOON_DIR } from './sky.js'
 import { createOcean } from './ocean.js'
 import { createScreens } from './screens.js'
 import { THEME_FACTORIES, THEME_ORDER } from './themes/index.js'
+import { setTreeWind } from './trees.js'
 
 // 场景总装 + 主题切换。对外：
 //   const world = createWorld(renderer, { quality })
@@ -195,6 +196,7 @@ export function createWorld(renderer, { quality = 'high', themes = THEME_ORDER, 
       if (active.some((th) => th.usesScreens)) screens.update(s)
       sky.update(s, camera)
       ocean.update(s)
+      setTreeWind(t)
       for (const th of active) th.update(s, camera)
       // 不用 createPostFX 时：直接显示离过渡终点更近的一侧
       applyTheme(m.p < 0.5 ? m.a : m.b)
