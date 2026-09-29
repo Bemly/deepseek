@@ -113,11 +113,14 @@ const MixShader = {
       vec3 a = texture2D(tA, vUv).rgb;
       vec3 b = texture2D(tB, vUv).rgb;
       vec3 col = mix(b, a, k);
-      float edge = exp(-pow((mask - th) / w, 2.0)) * step(0.001, uP) * step(uP, 0.999);
-      col += uEdge * edge * 2.2;
+      // 溶解边：一条细亮线 + 很淡的外晕（泛光会再把它晕开，所以本身要克制），首尾淡入淡出
+      float env = sin(clamp(uP, 0.0, 1.0) * 3.14159);
+      float core = exp(-pow((mask - th) / (w * 0.3), 2.0));
+      float glow = exp(-pow((mask - th) / (w * 1.2), 2.0));
+      col += uEdge * (core * 1.0 + glow * 0.15) * env;
       // 边缘附近零星的火花
-      float sp = step(0.985, h(floor(vUv * vec2(uAspect, 1.0) * 220.0) + floor(uTime * 12.0))) * exp(-pow((mask - th) / (w * 3.0), 2.0));
-      col += uEdge * sp * 3.0 * step(0.001, uP) * step(uP, 0.999);
+      float sp = step(0.988, h(floor(vUv * vec2(uAspect, 1.0) * 260.0) + floor(uTime * 12.0))) * exp(-pow((mask - th) / (w * 1.5), 2.0));
+      col += uEdge * sp * 1.5 * env;
       gl_FragColor = vec4(col, 1.0);
     }
   `,
