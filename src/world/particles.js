@@ -12,6 +12,12 @@ const MAX_PACKETS = 16
 function lanternGeometry(kind) {
   const L = (pts, segs = 10) => new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), segs)
   if (kind === 'sky') return L([[0, 0], [1.3, 0], [1.9, 2.5], [2.0, 4.2], [1.4, 5.2], [0, 5.3]], 10) // 孔明灯
+  if (kind === 'box') {
+    // 灯笼流し：四方纸灯 + 木底座
+    const parts = [new THREE.BoxGeometry(1.8, 0.35, 1.8).translate(0, 0.17, 0), new THREE.BoxGeometry(1.4, 1.9, 1.4).translate(0, 1.3, 0), new THREE.BoxGeometry(1.6, 0.15, 1.6).translate(0, 2.3, 0)]
+    for (const g of parts) g.deleteAttribute('uv')
+    return mergeGeometries(parts.map((g) => g.toNonIndexed()))
+  }
   if (kind === 'lotus') {
     // 莲花灯：浅碗 + 两层花瓣
     const parts = [L([[0, 0], [1.0, 0], [1.3, 0.5], [0.2, 0.6], [0, 0.6]], 8)]
@@ -168,9 +174,9 @@ export function createParticles({
           float a = (ring * 0.9 + hi * 0.8 + 0.06 * step(r, 1.0)) * vA * uAmt;
           gl_FragColor = vec4(uCol * a, 1.0);
         #elif KIND == 1
-          float c = cos(vRot), s = sin(vRot * 0.7);
+          float c = cos(vRot), s = sin(vRot);
           vec2 q = mat2(c, -s, s, c) * d;
-          q.x *= 1.0 + 0.6 * abs(sin(vRot * 0.5)); // 翻转时变窄
+          q.x /= max(0.25, abs(cos(vRot * 0.63))); // 翻转时变窄
           float body = smoothstep(0.42, 0.36, length(q * vec2(1.7, 1.0)));
           float notch = smoothstep(0.07, 0.12, length(q - vec2(0.0, 0.42)));
           float a = body * notch * vA * uAmt;
