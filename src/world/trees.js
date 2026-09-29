@@ -395,6 +395,30 @@ const SPECIES = {
     ],
     outward: 0.5,
   },
+  // 鹿角珊瑚：短粗、一路向上分叉
+  coral: {
+    trunk: { len: 0.22, rad: 0.07, lean: 0.35, steps: 4, gnarl: 0.3, flare: 0.25 },
+    levels: [
+      { n: [3, 5], at: [0.55, 1.0], angle: 0.75, len: 0.42, rad: 0.72, elev: 1.05, bend: 0.14, gnarl: 0.3, steps: 5 },
+      { n: [2, 3], at: [0.35, 1.0], angle: 0.6, len: 0.62, rad: 0.74, elev: 1.2, bend: 0.2, gnarl: 0.35, steps: 4 },
+      { n: [2, 3], at: [0.4, 1.0], angle: 0.55, len: 0.6, rad: 0.78, elev: 1.25, bend: 0.2, gnarl: 0.35, steps: 3 },
+    ],
+    outward: 0.3,
+    noRoots: true,
+  },
+  // 海扇（柳珊瑚）：在一个平面里铺开的细密网枝
+  fan: {
+    trunk: { len: 0.12, rad: 0.03, lean: 0.1, steps: 3, gnarl: 0.1, flare: 0.2 },
+    levels: [
+      { n: [4, 5], at: [0.5, 1.0], angle: 0.7, len: 0.5, rad: 0.7, elev: 0.9, bend: 0.1, gnarl: 0.25, steps: 6 },
+      { n: [3, 4], at: [0.2, 1.0], angle: 0.6, len: 0.5, rad: 0.7, elev: 1.0, bend: 0.1, gnarl: 0.3, steps: 5 },
+      { n: [3, 3], at: [0.2, 1.0], angle: 0.6, len: 0.5, rad: 0.75, elev: 1.05, bend: 0.12, gnarl: 0.3, steps: 4 },
+      { n: [2, 3], at: [0.3, 1.0], angle: 0.6, len: 0.5, rad: 0.8, elev: 1.1, bend: 0.12, gnarl: 0.3, steps: 3 },
+    ],
+    outward: 0,
+    planar: true,
+    noRoots: true,
+  },
   broadleaf: {
     trunk: { len: 0.4, rad: 0.045, lean: 0.15, steps: 7, gnarl: 0.2, flare: 0.5 },
     levels: [
@@ -429,6 +453,7 @@ function growSkeleton(R, type, height) {
       d.x += (R() - 0.5) * cfg.gnarl
       d.z += (R() - 0.5) * cfg.gnarl
       d.y += (R() - 0.5) * cfg.gnarl * 0.4
+      if (S.planar) d.z *= 0.08
       d.normalize()
       if (cfg.elev !== undefined) {
         const h = new THREE.Vector2(d.x, d.z)
@@ -456,6 +481,7 @@ function growSkeleton(R, type, height) {
       const phi = level === 0 ? phase + (k / n) * Math.PI * 2 + (R() - 0.5) * 0.6 : phase + k * 2.39996 + (R() - 0.5) * 0.8
       const axis = u.clone().multiplyScalar(Math.cos(phi)).addScaledVector(v, Math.sin(phi))
       const nd = pd.clone().applyAxisAngle(axis, L.angle * (0.8 + R() * 0.4))
+      if (S.planar) { nd.z *= 0.08; if (Math.abs(nd.x) < 0.2) nd.x += (k % 2 ? 0.3 : -0.3); nd.normalize() }
       // 让枝条往树冠外侧长（不往主干方向回折）
       const radial = new THREE.Vector3(origin.x, 0, origin.z)
       if (radial.length() > height * 0.04) {
@@ -477,7 +503,7 @@ function growSkeleton(R, type, height) {
   const lean = new THREE.Vector3((R() - 0.5) * T.lean, 1, (R() - 0.5) * T.lean).normalize()
   grow(new THREE.Vector3(0, -height * 0.02, 0), lean, height * T.len, height * T.rad, 0, T, T.flare)
   // 露出地面的根
-  const roots = 3 + Math.floor(R() * 3)
+  const roots = S.noRoots ? 0 : 3 + Math.floor(R() * 3)
   for (let k = 0; k < roots; k++) {
     const a = (k / roots) * Math.PI * 2 + R()
     const d = new THREE.Vector3(Math.cos(a), -0.35, Math.sin(a)).normalize()
@@ -748,6 +774,47 @@ export function createTree(type, { seed = 1, height = 40, tint, glow = 0, glowCo
   g.add(foliage)
   g.userData.dynamic = true // 不参与 bakeStatic（风动）
   return g
+}
+
+// 珊瑚：只有"枝干"，按高度从根部的深色渐变到枝头的亮色，枝头有发光的水螅体小球
+export function createCoral(type = 'coral', { seed = 1, height = 12, base = [0.35, 0.12, 0.2], tip = [1.0, 0.45, 0.55], glow = 0.4 } = {}) {
+  const R = rng(seed * 4099 + 7)
+  const segs = growSkeleton(R, type, height)
+  const minR = type === 'fan' ? height * 0.006 : height * 0.02
+  const parts = segs.map((s) => taperedTube(s.pts, Math.max(minR, s.r0), Math.max(minR * 0.9, s.r1), s.level === 0 ? 10 : 6, s.flare))
+  const last = SPECIES[type].levels.length
+  if (type === 'coral') {
+    for (const s of segs) if (s.level === last) {
+      const e = s.pts[s.pts.length - 1]
+      parts.push(new THREE.SphereGeometry(Math.max(minR, s.r1) * 1.25, 8, 6).translate(e.x, e.y, e.z))
+    }
+  }
+  const g = mergeGeometries(parts.map((p) => (p.index ? p.toNonIndexed() : p)).map((p) => { p.deleteAttribute('uv'); return p }))
+  const p = g.attributes.position
+  const col = new Float32Array(p.count * 3)
+  for (let i = 0; i < p.count; i++) {
+    const t = Math.min(1, Math.max(0, p.getY(i) / height))
+    const k = Math.pow(t, 1.3)
+    for (let c = 0; c < 3; c++) col[i * 3 + c] = base[c] + (tip[c] - base[c]) * k
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3))
+  const m = new THREE.Mesh(g, coralMaterial(glow))
+  m.castShadow = true
+  m.receiveShadow = true
+  return m
+}
+
+const coralMats = {}
+function coralMaterial(glow) {
+  if (coralMats[glow]) return coralMats[glow]
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 })
+  // 枝头自发光（用顶点色本身当发光色）
+  m.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      totalEmissiveRadiance += vColor.rgb * smoothstep(0.35, 1.0, max(vColor.r, max(vColor.g, vColor.b))) * ${glow.toFixed(3)};`)
+  }
+  m.customProgramCacheKey = () => 'coral' + glow
+  return (coralMats[glow] = m)
 }
 
 // 草地：一簇簇十字交叉的草/野花卡片。points = [{ pos: Vector3, up?: Vector3 }]

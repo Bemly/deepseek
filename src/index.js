@@ -2,4 +2,4 @@
 export { createWorld } from './world/index.js'
 export { createPostFX } from './postfx.js'
 export { computeState } from './state.js'
-export { LYRICS, SECTIONS, TOOL_CALLS, EVENTS, SONG, lyricAt, sectionAt } from './lyrics.js'
+export { LYRICS, SECTIONS, TOOL_CALLS, EVENTS, SONG, lyricAt, sectionAt, DEMO_THEME_SCHEDULE } from './lyrics.js'

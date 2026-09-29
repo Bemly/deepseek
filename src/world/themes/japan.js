@@ -447,7 +447,7 @@ export function createJapanTheme() {
     isle.receiveShadow = true
     stage.add(isle)
     // 岩顶的苔草
-    const moss = meadow(scatterOnTop(geo, { count: 700, minUp: 0.7, minY: 3, seed: sd }), { size: 2.2, seed: sd + 1, tint: [0.7, 0.8, 0.75], flowers: [0.7, 0.2, 0.1, 0] })
+    const moss = meadow(scatterOnTop(geo, { count: 700, minUp: 0.7, minY: 3, seed: sd }), { size: 2.2, seed: sd + 1, tint: [0.8, 0.95, 0.8], flowers: [0.9, 0.04, 0.06, 0] })
     moss.position.copy(isle.position)
     moss.rotation.y = isle.rotation.y
     stage.add(moss)

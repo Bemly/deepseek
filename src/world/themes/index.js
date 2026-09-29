@@ -2,6 +2,7 @@ import { createHarborTheme } from './harbor.js'
 import { createAncientTheme } from './ancient.js'
 import { createJapanTheme } from './japan.js'
 import { createCloudsTheme } from './clouds.js'
+import { createAtlantisTheme } from './atlantis.js'
 
 // 主题注册表：名字 → 工厂函数。顺序就是预览页按钮的顺序。
 export const THEME_FACTORIES = {
@@ -9,6 +10,7 @@ export const THEME_FACTORIES = {
   ancient: createAncientTheme,
   japan: createJapanTheme,
   clouds: createCloudsTheme,
+  atlantis: createAtlantisTheme,
 }
 
 export const THEME_ORDER = Object.keys(THEME_FACTORIES)

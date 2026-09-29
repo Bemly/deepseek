@@ -167,9 +167,17 @@ export function bakeStatic(root) {
   let removed = 0
   for (const [mat, meshes] of groups) {
     if (meshes.length < 2) continue
+    const keep = ['position', 'normal', 'uv']
+    if (mat.vertexColors) keep.push('color') // 用顶点色的材质要保住 color，否则合并后整块变黑
     const geos = meshes.map((o) => {
       let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()
-      for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name)
+      for (const name of Object.keys(g.attributes)) if (!keep.includes(name)) g.deleteAttribute(name)
+      if (mat.vertexColors && !g.attributes.color) g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 3).fill(1), 3))
+      else if (mat.vertexColors && g.attributes.color.itemSize !== 3) {
+        const c = g.attributes.color, a = new Float32Array(c.count * 3)
+        for (let i = 0; i < c.count; i++) a.set([c.getX(i), c.getY(i), c.getZ(i)], i * 3)
+        g.setAttribute('color', new THREE.BufferAttribute(a, 3))
+      }
       if (!g.attributes.normal) g.computeVertexNormals()
       if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2))
       g.clearGroups()
