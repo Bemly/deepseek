@@ -4,7 +4,18 @@ import { GLSL_NOISE, WATER_Y } from './util.js'
 import { MOON_DIR } from './sky.js'
 
 // 海面：平面镜反射 + 程序化波浪法线扰动 + 月光高光 + 荧光海（跟着 state.sea）。
-// 反射里能看到霓虹城市、舞台和 MMD 角色本身。
+// 反射里能看到霓虹城市、舞台和 MMD 角色本身。有水的主题（港湾/古风/和风）共用这一片，按主题换颜色。
+
+export const OCEAN_DEFAULTS = {
+  deep: [0.004, 0.012, 0.03],
+  near: [0.0, 0.03, 0.05],
+  bio: [0.1, 0.55, 1.0],
+  sparkle: [0.5, 0.9, 1.0],
+  spec: [0.8, 0.85, 1.0],
+  ring: [1.0, 0.6, 0.3],
+  lightDir: MOON_DIR.toArray(),
+  waves: 1,
+}
 export function createOcean({ quality }) {
   const res = quality === 'low' ? 512 : quality === 'ultra' ? 2048 : 1024
   const shader = {
@@ -20,6 +31,13 @@ export function createOcean({ quality }) {
         uPulse: { value: 0 },
         uHush: { value: 0 },
         uMoonDir: { value: MOON_DIR.clone() },
+        uDeep: { value: new THREE.Vector3() },
+        uNear: { value: new THREE.Vector3() },
+        uBio: { value: new THREE.Vector3() },
+        uSparkle: { value: new THREE.Vector3() },
+        uSpec: { value: new THREE.Vector3() },
+        uRing: { value: new THREE.Vector3() },
+        uWaves: { value: 1 },
       },
     ]),
     vertexShader: /* glsl */ `
@@ -39,8 +57,8 @@ export function createOcean({ quality }) {
     fragmentShader: /* glsl */ `
       uniform sampler2D tDiffuse;
       uniform vec3 color;
-      uniform float uTime, uSea, uPulse, uHush;
-      uniform vec3 uMoonDir;
+      uniform float uTime, uSea, uPulse, uHush, uWaves;
+      uniform vec3 uMoonDir, uDeep, uNear, uBio, uSparkle, uSpec, uRing;
       varying vec4 vUv;
       varying vec3 vWorld;
       #include <fog_pars_fragment>
@@ -64,13 +82,13 @@ export function createOcean({ quality }) {
           float f = freqs[i];
           float fade = exp(-dist * f * 0.0035);
           float ph = dot(dirs[i], p) * f + t * sqrt(f * 9.8) * 2.2;
-          g += dirs[i] * cos(ph) * f * amps[i] * fade;
+          g += dirs[i] * cos(ph) * f * amps[i] * fade * uWaves;
         }
         float nf = exp(-dist * 0.00045);
         vec2 q = p * 0.045 + vec2(t * 0.05, -t * 0.03);
         float e = 0.35;
         float n0 = fbm(q);
-        g += vec2(fbm(q + vec2(e, 0.0)) - n0, fbm(q + vec2(0.0, e)) - n0) * 1.4 * nf;
+        g += vec2(fbm(q + vec2(e, 0.0)) - n0, fbm(q + vec2(0.0, e)) - n0) * 1.4 * nf * uWaves;
         return normalize(vec3(-g.x, 1.0, -g.y));
       }
 
@@ -93,16 +111,15 @@ export function createOcean({ quality }) {
         fres = clamp(fres, 0.0, 1.0);
 
         // 水体本色：深海蓝，靠近舞台稍带青色
-        vec3 deep = vec3(0.004, 0.012, 0.03);
         float nearStage = exp(-length(vWorld.xz) / 260.0);
-        vec3 body = deep + vec3(0.0, 0.03, 0.05) * nearStage * (0.4 + uSea);
+        vec3 body = uDeep + uNear * nearStage * (0.4 + uSea);
 
         vec3 col = mix(body, refl, 0.35 + 0.65 * fres);
 
         // 月光高光路径
         vec3 H = normalize(uMoonDir + V);
         float spec = pow(max(dot(N, H), 0.0), 700.0) * 2.2 + pow(max(dot(N, H), 0.0), 80.0) * 0.05;
-        col += vec3(0.8, 0.85, 1.0) * spec * (1.0 - 0.4 * uHush);
+        col += uSpec * spec * (1.0 - 0.4 * uHush);
 
         // 荧光海：细碎发光的波纹，靠近舞台最密，随节拍呼吸
         float bioMask = exp(-length(vWorld.xz) / 1400.0) + 0.25 * exp(-length(vWorld.xz - vec2(-2200.0, -400.0)) / 500.0);
@@ -110,12 +127,12 @@ export function createOcean({ quality }) {
         float cell = abs(fbm(bp + vec2(uTime * 0.12, uTime * 0.07)) - 0.5);
         float lines = pow(1.0 - clamp(cell * 3.5, 0.0, 1.0), 14.0) * smoothstep(0.35, 0.7, vnoise(vWorld.xz * 0.01 + uTime * 0.03));
         float sparkle = step(0.997, hash12(floor(vWorld.xz * 0.35) + floor(uTime * 3.0))) * 0.8 * exp(-dist / 250.0);
-        vec3 bio = vec3(0.1, 0.55, 1.0) * lines + vec3(0.5, 0.9, 1.0) * sparkle;
+        vec3 bio = uBio * lines + uSparkle * sparkle;
         col += bio * bioMask * uSea * (0.55 + 0.45 * uPulse) * exp(-dist / 900.0) * 0.45;
 
         // 舞台脚下一圈暖色光晕
         float ring = exp(-pow((length(vWorld.xz) - 46.0) / 10.0, 2.0));
-        col += vec3(1.0, 0.6, 0.3) * ring * 0.08;
+        col += uRing * ring * 0.08;
 
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
@@ -142,6 +159,12 @@ export function createOcean({ quality }) {
 
   return {
     object: water,
+    setParams(p = {}) {
+      const g = (k) => p[k] ?? OCEAN_DEFAULTS[k]
+      for (const k of ['deep', 'near', 'bio', 'sparkle', 'spec', 'ring']) u['u' + k[0].toUpperCase() + k.slice(1)].value.set(...g(k))
+      u.uMoonDir.value.set(...g('lightDir')).normalize()
+      u.uWaves.value = g('waves')
+    },
     setResolution(w, h) {
       const scale = quality === 'low' ? 0.35 : quality === 'ultra' ? 0.75 : 0.5
       water.getRenderTarget().setSize(Math.max(256, Math.round(w * scale)), Math.max(256, Math.round(h * scale)))

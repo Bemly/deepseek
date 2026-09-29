@@ -133,6 +133,9 @@ export function whaleMaterial({ sky = true } = {}) {
       uOpacity: { value: 1 },
       uGlow: { value: 1 },
       uMoonDir: { value: new THREE.Vector3(-0.62, 0.34, -1).normalize() },
+      uBack: { value: new THREE.Color(0.03, 0.1, 0.42) },
+      uBelly: { value: new THREE.Color(0.3, 0.55, 1.0) },
+      uRim: { value: new THREE.Color(0.2, 0.6, 1.0) },
     },
   ])
   return new THREE.ShaderMaterial({
@@ -163,7 +166,7 @@ export function whaleMaterial({ sky = true } = {}) {
     `,
     fragmentShader: /* glsl */ `
       uniform float uTime, uOpacity, uGlow;
-      uniform vec3 uMoonDir;
+      uniform vec3 uMoonDir, uBack, uBelly, uRim;
       varying vec3 vObj;
       varying vec3 vN;
       varying vec3 vWorld;
@@ -176,8 +179,8 @@ export function whaleMaterial({ sky = true } = {}) {
         if (!gl_FrontFacing) N = -N;
         float belly = smoothstep(0.02, -0.06, vObj.y);
         // 背深蓝、腹浅蓝（大肥鱼配色）
-        vec3 back = vec3(0.03, 0.1, 0.42);
-        vec3 bellyC = vec3(0.3, 0.55, 1.0);
+        vec3 back = uBack;
+        vec3 bellyC = uBelly;
         vec3 base = mix(back, bellyC, belly);
         // 腹褶纹
         float grooves = belly * smoothstep(0.55, 0.9, vObj.x) * (0.5 + 0.5 * sin(vObj.z * 260.0));
@@ -193,7 +196,7 @@ export function whaleMaterial({ sky = true } = {}) {
         vec3 col;
         float alpha = 1.0;
         ${sky ? `
-        col = base * (0.18 + 0.3 * fres) + vec3(0.2, 0.6, 1.0) * pow(fres, 1.5) * 1.1 + vec3(0.8, 0.9, 1.0) * star * 3.0;
+        col = base * (0.18 + 0.3 * fres) + uRim * pow(fres, 1.5) * 1.1 + vec3(0.8, 0.9, 1.0) * star * 3.0;
         col += vec3(0.3, 0.7, 1.0) * grooves * 0.25;
         col *= uGlow * uOpacity;
         ` : `
@@ -203,7 +206,7 @@ export function whaleMaterial({ sky = true } = {}) {
         float cityL = max(dot(N, normalize(vec3(0.0, 0.3, -1.0))), 0.0);
         float stageL = max(dot(N, normalize(vec3(-0.6, 0.2, 0.8))), 0.0);
         col = base * (0.06 + 0.4 * diff + 0.22 * cityL) + vec3(0.9, 0.5, 0.3) * stageL * 0.12 * (1.0 - belly * 0.5);
-        col += vec3(0.6, 0.7, 0.9) * spec * 0.5 + vec3(0.25, 0.6, 1.0) * fres * 0.8 + vec3(0.9, 0.95, 1.0) * star * 3.0;
+        col += vec3(0.6, 0.7, 0.9) * spec * 0.5 + uRim * fres * 0.8 + vec3(0.9, 0.95, 1.0) * star * 3.0;
         `}
         gl_FragColor = vec4(col, alpha);
         #include <tonemapping_fragment>
@@ -214,7 +217,15 @@ export function whaleMaterial({ sky = true } = {}) {
   })
 }
 
-export function createWhales() {
+// 主题可以换配色和"水面"高度（云海、深渊），轨道都一样：绕着 -Z 方向的城群上空游
+export function createWhales({ floorY = WATER_Y, back, belly, rim, splashColor = [0.55, 0.8, 1.0], moonDir } = {}) {
+  const tint = (m) => {
+    if (back) m.uniforms.uBack.value.setRGB(...back)
+    if (belly) m.uniforms.uBelly.value.setRGB(...belly)
+    if (rim) m.uniforms.uRim.value.setRGB(...rim)
+    if (moonDir) m.uniforms.uMoonDir.value.set(...moonDir).normalize()
+    return m
+  }
   const root = new THREE.Group()
   root.name = 'whales'
   const geo = makeWhaleGeometry()
@@ -226,7 +237,7 @@ export function createWhales() {
     { len: 520, cx: 1800, cz: -4600, rx: 2600, rz: 1100, y: 1350, speed: 0.042, phase: 4.0, bob: 60 },
     { len: 260, cx: -600, cz: -2600, rx: 1500, rz: 700, y: 900, speed: 0.06, phase: 1.0, bob: 40 },
   ].map((o) => {
-    const mat = whaleMaterial({ sky: true })
+    const mat = tint(whaleMaterial({ sky: true }))
     const m = new THREE.Mesh(geo, mat)
     m.scale.setScalar(o.len)
     m.frustumCulled = false
@@ -235,13 +246,13 @@ export function createWhales() {
   })
 
   // 跃海鲸
-  const breachMat = whaleMaterial({ sky: false })
+  const breachMat = tint(whaleMaterial({ sky: false }))
   breachMat.uniforms.uAmp.value = 0.02
   const breach = new THREE.Mesh(geo, breachMat)
   breach.scale.setScalar(520)
   breach.visible = false
   root.add(breach)
-  const BREACH_POS = new THREE.Vector3(1000, WATER_Y, -1900)
+  const BREACH_POS = new THREE.Vector3(1000, floorY, -1900)
   const BREACH_YAW = 3.0
   const BREACH_DIR = new THREE.Vector3(Math.cos(BREACH_YAW), 0, -Math.sin(BREACH_YAW))
   const BREACH_RUN = 1100
@@ -263,7 +274,7 @@ export function createWhales() {
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    uniforms: { uAge: { value: -1 }, uAge2: { value: -1 }, uO: { value: BREACH_POS.clone() }, uO2: { value: BREACH_POS.clone() } },
+    uniforms: { uAge: { value: -1 }, uAge2: { value: -1 }, uO: { value: BREACH_POS.clone() }, uO2: { value: BREACH_POS.clone() }, uCol: { value: new THREE.Color(...splashColor) } },
     vertexShader: /* glsl */ `
       attribute vec3 aDir;
       uniform float uAge, uAge2;
@@ -286,11 +297,12 @@ export function createWhales() {
       }
     `,
     fragmentShader: /* glsl */ `
+      uniform vec3 uCol;
       varying float vA;
       void main() {
         float r = length(gl_PointCoord - 0.5) * 2.0;
         float a = smoothstep(1.0, 0.2, r) * vA;
-        gl_FragColor = vec4(vec3(0.55, 0.8, 1.0) * a * 0.55, 1.0);
+        gl_FragColor = vec4(uCol * a * 0.55, 1.0);
       }
     `,
   })
@@ -327,13 +339,13 @@ export function createWhales() {
         breach.visible = k <= 1.05
         const height = 820 * 4 * k * (1 - k)
         breach.position.copy(BREACH_POS).addScaledVector(BREACH_DIR, k * BREACH_RUN)
-        breach.position.y = WATER_Y - 260 + height
+        breach.position.y = floorY - 260 + height
         const pitch = THREE.MathUtils.lerp(1.25, -1.35, k)
         breach.rotation.set(0.9 * k, BREACH_YAW, pitch)
         breachMat.uniforms.uTime.value = state.t
         splashMat.uniforms.uAge.value = b - 0.15
         splashMat.uniforms.uAge2.value = b - T * 0.97
-        splashMat.uniforms.uO2.value.copy(BREACH_POS).addScaledVector(BREACH_DIR, BREACH_RUN).setY(WATER_Y)
+        splashMat.uniforms.uO2.value.copy(BREACH_POS).addScaledVector(BREACH_DIR, BREACH_RUN).setY(floorY)
       } else {
         breach.visible = false
         splashMat.uniforms.uAge.value = -1

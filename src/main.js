@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { createWorld } from './world/index.js'
 import { createPostFX } from './postfx.js'
-import { SONG, SECTIONS } from './lyrics.js'
+import { SONG, SECTIONS, DEMO_THEME_SCHEDULE } from './lyrics.js'
 
 // 预览页：播放歌曲、拖进度、切机位看场景。MMD 模型不在这里加载——
 // 把 createWorld / world.update(t) 接到你自己的 MMD 播放器里即可（见 README）。
@@ -50,8 +50,8 @@ async function main() {
 
   const scene = new THREE.Scene()
   const camera = new THREE.PerspectiveCamera(38, 1, 1, 80000)
-  const world = createWorld(renderer, { quality }).attach(scene)
-  const post = createPostFX(renderer, scene, camera, { bloom: params.get('bloom') !== '0' })
+  const world = createWorld(renderer, { quality, initial: params.get('theme') || defaults.theme }).attach(scene)
+  const post = createPostFX(renderer, scene, camera, { bloom: params.get('bloom') !== '0', world })
 
   // 身高参考：20 单位高的全息人形（MMD 角色大约这么高），只在预览里出现
   const ref = new THREE.Group()
@@ -166,7 +166,10 @@ async function main() {
     } else if (e.code === 'ArrowRight') setTime(clock + 5)
     else if (e.code === 'ArrowLeft') setTime(clock - 5)
     else if (e.key === 'h' || e.key === 'H') $('ui').classList.toggle('hidden')
-    else if (/^[1-7]$/.test(e.key)) setView(Object.keys(VIEWS)[+e.key - 1])
+    else if (e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
+      const th = world.themes[+e.code.slice(5) - 1]
+      if (th) themeButtons[+e.code.slice(5) - 1].click()
+    } else if (/^[1-7]$/.test(e.key)) setView(Object.keys(VIEWS)[+e.key - 1])
   })
 
   $('quality').onchange = (e) => {
@@ -189,6 +192,29 @@ async function main() {
   }
   window.addEventListener('resize', resize)
   resize()
+  world.compile(renderer, scene, camera)
+
+  // ---------- 主题 ----------
+  const themeButtons = []
+  world.themes.forEach((th, i) => {
+    const b = document.createElement('button')
+    b.textContent = th.label
+    b.dataset.theme = th.name
+    b.title = `切换到「${th.label}」（Shift+${i + 1}）`
+    b.onclick = () => {
+      $('auto').checked = false
+      world.setSchedule(null)
+      world.transitionTo(th.name)
+    }
+    $('themes').appendChild(b)
+    themeButtons.push(b)
+  })
+  const demo = DEMO_THEME_SCHEDULE.filter((e) => world.themes.some((th) => th.name === e.theme))
+  $('auto').onchange = (e) => world.setSchedule(e.target.checked ? demo : null)
+  if (params.get('auto') === '1') {
+    $('auto').checked = true
+    world.setSchedule(demo)
+  }
 
   if (params.get('ui') === '0') $('ui').classList.add('hidden')
 
@@ -219,6 +245,8 @@ async function main() {
     seekEl.value = clock
     $('time').textContent = `${Math.floor(clock / 60)}:${(clock % 60).toFixed(1).padStart(4, '0')}`
     $('section').textContent = s.section
+    const shown = world.mix ? world.mix.b : world.theme
+    themeButtons.forEach((b) => b.classList.toggle('on', b.dataset.theme === shown))
     const text = $('showLyric').checked && s.lyric ? s.lyric.text : ''
     if (text !== lastLyric) {
       $('lyric').textContent = text
@@ -233,8 +261,9 @@ async function main() {
     renderer,
     camera,
     setView,
-    renderAt(t, view) {
+    renderAt(t, view, theme) {
       if (view) setView(view)
+      if (theme) world.setTheme(theme)
       clock = t
       controls.update()
       const s = world.update(t, camera)

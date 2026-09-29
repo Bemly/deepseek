@@ -1,5 +1,6 @@
 import * as THREE from 'three'
-import { rng, GLSL_NOISE, WATER_Y, canvasTexture } from './util.js'
+import { rng, WATER_Y, canvasTexture } from './util.js'
+import { createBuildingMaterial, updateBuildingUniforms } from './kit.js'
 
 // 霓虹海湾城市（中远景）：
 // - ~1200 栋楼用一个 InstancedMesh，窗户/霓虹/被"调用"击中的闪光全在 shader 里
@@ -17,133 +18,6 @@ const NEON = [
   new THREE.Color(1.0, 0.62, 0.25), // 琥珀
   new THREE.Color(0.25, 0.45, 1.0), // 深海蓝
 ]
-
-function buildingMaterial() {
-  const uniforms = THREE.UniformsUtils.merge([
-    THREE.UniformsLib.fog,
-    {
-      uTime: { value: 0 },
-      uCity: { value: 0 },
-      uWave: { value: 0 },
-      uFall: { value: 0 },
-      uNeon: { value: 0 },
-      uPulse: { value: 0 },
-      uGlitch: { value: 0 },
-      uHush: { value: 0 },
-    },
-  ])
-  return new THREE.ShaderMaterial({
-    uniforms,
-    fog: true,
-    vertexShader: /* glsl */ `
-      attribute float aSeed;
-      attribute vec3 aNeon;
-      attribute float aFlash;
-      attribute float aDensity;
-      varying vec3 vLocal;
-      varying vec3 vNrm;
-      varying vec3 vScale;
-      varying float vSeed;
-      varying vec3 vNeonCol;
-      varying float vFlash;
-      varying float vDensity;
-      varying vec3 vWorld;
-      #include <fog_pars_vertex>
-      void main() {
-        vLocal = position;
-        vNrm = normal;
-        vScale = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
-        vSeed = aSeed;
-        vNeonCol = aNeon;
-        vFlash = aFlash;
-        vDensity = aDensity;
-        vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
-        vWorld = wp.xyz;
-        vec4 mvPosition = viewMatrix * wp;
-        gl_Position = projectionMatrix * mvPosition;
-        #include <fog_vertex>
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform float uTime, uCity, uWave, uFall, uNeon, uPulse, uGlitch, uHush;
-      varying vec3 vLocal;
-      varying vec3 vNrm;
-      varying vec3 vScale;
-      varying float vSeed;
-      varying vec3 vNeonCol;
-      varying float vFlash;
-      varying float vDensity;
-      varying vec3 vWorld;
-      #include <fog_pars_fragment>
-      ${GLSL_NOISE}
-
-      void main() {
-        float xN = clamp((vWorld.x + ${CITY_X.toFixed(1)}) / ${(CITY_X * 2).toFixed(1)}, 0.0, 1.0);
-        float wake = smoothstep(xN - 0.04, xN, uWave);
-        float dead = smoothstep(1.0 - uFall - 0.03, 1.0 - uFall, xN) * step(0.001, uFall);
-        float glitchFlick = uGlitch > 0.01 ? step(0.5, hash12(vec2(vSeed * 13.0, floor(uTime * 18.0)))) : 1.0;
-        float alive = (1.0 - dead) * mix(1.0, glitchFlick, min(1.0, uGlitch * 1.5));
-        float level = uCity * mix(0.12, 1.0, wake) * alive;
-        float neonOn = uNeon * alive * step(0.45, fract(vSeed * 7.13));
-
-        float height = vScale.y;
-        float y = vLocal.y * height; // 离地高度
-        vec3 base = vec3(0.010, 0.014, 0.028);
-        vec3 col;
-
-        if (vNrm.y > 0.5) {
-          // 楼顶：暗色 + 边缘霓虹
-          float ex = 0.5 - abs(vLocal.x), ez = 0.5 - abs(vLocal.z);
-          float edge = min(ex * vScale.x, ez * vScale.z);
-          float rim = smoothstep(5.0, 1.0, edge);
-          col = base * 1.2 + vNeonCol * rim * neonOn * 2.5;
-          col += vec3(0.6, 0.9, 1.0) * vFlash * (0.4 + rim * 4.0);
-        } else {
-          bool sideX = abs(vNrm.x) > 0.5;
-          float faceW = sideX ? vScale.z : vScale.x;
-          float u = (sideX ? vLocal.z : vLocal.x) * faceW;
-          vec2 grid = vec2(u / 26.0, y / 40.0);
-          vec2 cell = floor(grid);
-          vec2 f = fract(grid);
-          float faceId = dot(vNrm, vec3(1.0, 2.0, 3.0));
-          float h = hash13(vec3(cell, vSeed * 97.0 + faceId));
-          float h2 = hash13(vec3(cell.yx, vSeed * 31.0 + faceId + 5.0));
-          float lit = step(h, vDensity * level);
-          float m = smoothstep(0.1, 0.16, f.x) * smoothstep(0.9, 0.84, f.x) * smoothstep(0.2, 0.28, f.y) * smoothstep(0.88, 0.8, f.y);
-          vec3 warm = vec3(1.0, 0.7, 0.4), cool = vec3(0.7, 0.85, 1.0), tint = mix(vNeonCol, vec3(1.0), 0.45);
-          vec3 wc = h2 < 0.55 ? warm : h2 < 0.88 ? cool : tint;
-          float inten = 0.45 + 0.75 * fract(h2 * 13.7);
-          if (h2 > 0.985) inten *= 0.4 + 0.6 * step(0.3, fract(uTime * (0.7 + h2) + h));
-          vec3 detailed = wc * inten * lit * m;
-          // 远处窗格小于像素时换成平均亮度，避免摩尔纹闪烁
-          float px = max(fwidth(grid.x), fwidth(grid.y));
-          float detail = 1.0 - smoothstep(0.3, 0.9, px);
-          vec3 avg = mix(warm, cool, 0.4) * 0.85 * vDensity * level * 0.3;
-          vec3 win = mix(avg, detailed, detail);
-          // 楼板横线 + 玻璃幕墙微弱的天光
-          float shade = 0.55 + 0.45 * max(0.0, dot(vNrm, normalize(vec3(-0.3, 0.2, 1.0))));
-          col = base * shade + vec3(0.01, 0.018, 0.04) * (1.0 - m) * smoothstep(0.0, 1.0, y / max(height, 1.0));
-          col += win;
-          // 转角竖向霓虹灯条
-          float edgeU = faceW * 0.5 - abs(u);
-          float corner = smoothstep(4.0, 1.0, edgeU) * step(0.6, fract(vSeed * 3.71));
-          // 楼冠霓虹带
-          float crown = smoothstep(height - 26.0, height - 20.0, y) * smoothstep(height - 6.0, height - 12.0, y);
-          float stripe = step(0.72, fract(vSeed * 5.3)) * smoothstep(3.0, 0.0, abs(mod(y + vSeed * 50.0, 160.0) - 80.0));
-          float beat = 1.0 + uPulse * 0.9;
-          col += vNeonCol * (corner * 1.2 + crown * 2.4 + stripe * 0.8) * neonOn * beat;
-          // 被工具调用击中：楼冠爆亮 + 整栋泛光
-          col += vec3(0.55, 0.9, 1.0) * vFlash * (crown * 10.0 + 0.35 + 0.8 * smoothstep(height * 0.6, height, y));
-        }
-        col *= 1.0 - 0.35 * uHush;
-        gl_FragColor = vec4(col, 1.0);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-        #include <fog_fragment>
-      }
-    `,
-  })
-}
 
 function neonSignTexture(text, color, { font = '700 150px "Monoton", "Pacifico", "Arial Black", sans-serif', w = 1024, h = 256 } = {}) {
   return canvasTexture(w, h, (g) => {
@@ -247,7 +121,7 @@ export function createCity({ screens }) {
   const aNeon = new Float32Array(count * 3)
   const aFlash = new Float32Array(count)
   const aDensity = new Float32Array(count)
-  const mat = buildingMaterial()
+  const mat = createBuildingMaterial({ extentX: CITY_X })
   const mesh = new THREE.InstancedMesh(boxGeo, mat, count)
   const m4 = new THREE.Matrix4()
   const q = new THREE.Quaternion()
@@ -437,15 +311,7 @@ export function createCity({ screens }) {
     },
     update(state) {
       flashAttr.needsUpdate = true
-      const u = mat.uniforms
-      u.uTime.value = state.t
-      u.uCity.value = state.city
-      u.uWave.value = state.cityWave
-      u.uFall.value = state.fall
-      u.uNeon.value = state.neon
-      u.uPulse.value = state.pulse
-      u.uGlitch.value = state.glitch
-      u.uHush.value = state.hush
+      updateBuildingUniforms(mat, state)
       avMat.uniforms.uTime.value = state.t
       const alive = 1 - state.fall
       lampMat.opacity = 0.3 + 0.7 * Math.min(1, state.city * 1.5) * alive

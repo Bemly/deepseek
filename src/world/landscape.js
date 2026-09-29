@@ -7,7 +7,7 @@ import { coastZ } from './city.js'
 // - 海湾右侧的岬角岛 + 跨海大桥（桥灯、主缆灯链、车流）
 // - 舞台左前方的灯塔礁石，旋转光柱扫过整个海湾
 
-function mountainRing({ radius, spread, height, seed, color, topColor, sector }) {
+export function mountainRing({ radius, spread, height, seed, color, topColor, sector }) {
   const N = 900
   const pos = []
   const col = []
@@ -38,7 +38,7 @@ function mountainRing({ radius, spread, height, seed, color, topColor, sector })
   return new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog: true }))
 }
 
-function rock(radius, seed, flat = 0.55, detail = 3) {
+export function rock(radius, seed, flat = 0.55, detail = 3) {
   const g = new THREE.IcosahedronGeometry(radius, detail)
   const p = g.attributes.position
   const v = new THREE.Vector3()

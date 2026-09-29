@@ -18,6 +18,10 @@ html, body { margin: 0; height: 100%; background: #04070f; color: var(--fg); ove
 .title b { font-size: 15px; letter-spacing: .02em; }
 .title span { color: var(--muted); font-size: 12px; }
 .section { background: var(--glass); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font: 600 12px "JetBrains Mono", monospace; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+.themes { display: flex; gap: 4px; flex-wrap: wrap; background: var(--glass); border: 1px solid var(--line); border-radius: 10px; padding: 4px; backdrop-filter: blur(8px); }
+.themes button { background: transparent; color: var(--muted); border: 0; border-radius: 7px; padding: 5px 10px; font: inherit; cursor: pointer; }
+.themes button:hover { color: var(--fg); }
+.themes button.on { background: rgba(95, 200, 255, .18); color: var(--fg); }
 .views { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .views button, .bar button, .bar select, .file { background: var(--glass); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font: inherit; cursor: pointer; backdrop-filter: blur(8px); }
 .views button:hover, .bar button:hover { border-color: var(--accent); }

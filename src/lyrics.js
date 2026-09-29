@@ -99,6 +99,16 @@ export const EVENTS = {
   swingOn: 119.62,
 }
 
+// 预览页"按段落切场景"用的示例排程（world.setSchedule 的格式）。正式用的时候按你的分镜改。
+export const DEMO_THEME_SCHEDULE = [
+  { t: 0, theme: 'harbor' },
+  { t: 22.16, theme: 'ancient', duration: 2.4 },
+  { t: 51.44, theme: 'clouds', duration: 2.0 },
+  { t: 80.18, theme: 'japan', duration: 1.2 },
+  { t: 93.88, theme: 'atlantis', duration: 2.4 },
+  { t: 103.14, theme: 'harbor', duration: 1.6 },
+]
+
 export function lyricAt(t) {
   for (let i = LYRICS.length - 1; i >= 0; i--) {
     const l = LYRICS[i]
