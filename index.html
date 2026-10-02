@@ -32,40 +32,61 @@
           <div class="marks" id="marks"></div>
           <input id="seek" type="range" min="0" max="127.15" step="0.01" value="0" aria-label="歌曲进度" />
         </div>
-        <label class="tog"><input type="checkbox" id="showLyric" checked /> 歌词</label>
-        <select id="model" aria-label="角色模型" title="角色模型（默认 blend 版，v2c 三渲二角色）">
-          <option value="blend" selected>模型·blend版</option>
-          <option value="ref">身高参考</option>
-          <option value="hidden">隐藏</option>
-        </select>
-        <label class="tog"><input type="checkbox" id="tour" /> 漫游</label>
-        <label class="tog" title="按歌曲段落自动切换场景"><input type="checkbox" id="auto" /> 按段落切场景</label>
-        <select id="moveStyle" aria-label="动作风格" title="玩家模式的动作风格（缺的动作用 Motifect 补）">
-          <option value="girl" selected>动作·少女MMD</option>
-          <option value="hand">动作·手搓</option>
-          <option value="ual">动作·Quaternius</option>
-          <option value="motifect">动作·Motifect</option>
-          <option value="import">动作·导入</option>
-        </select>
-        <button id="importBtn" class="tog" title="自行导入动作：.vmd .vrma .bvh .fbx .glb（只存在本机浏览器，不上传）">导入动作</button>
-        <button id="fpBtn" class="tog" title="第一人称：角色脱离舞蹈由你控制（WASD/空格/Shift，双击空格飞行，V 切视角）">第一人称</button>
-        <select id="cam" aria-label="运镜" title="运镜（默认 blend 版，与 v2c 同运镜）">
-          <option value="blend" selected>运镜·blend版</option>
-          <option value="manual">运镜·手动</option>
-        </select>
-        <select id="pipe" aria-label="渲染管线" title="渲染管线（默认 web 版；blend 版 = v2c 的 post_final 合成；无阴影 = 角色不做明暗）">
-          <option value="web" selected>管线·web版</option>
-          <option value="blend">管线·blend版</option>
-          <option value="blend-flat">管线·blend版·无阴影</option>
-          <option value="simple">管线·简洁</option>
-        </select>
-        <select id="quality" aria-label="画质">
-          <option value="low">流畅</option>
-          <option value="high" selected>高</option>
-          <option value="ultra">极致</option>
-        </select>
-        <label class="file" id="fileLabel" hidden>选择 mp3<input type="file" id="file" accept="audio/*" /></label>
+        <button id="settingsBtn" class="gear" title="设置" aria-label="设置" aria-expanded="false">⚙</button>
       </footer>
+      <section id="settings" class="settings" hidden aria-label="设置">
+        <h3>场景</h3>
+        <label class="row"><span>按段落切场景</span><input type="checkbox" id="auto" /></label>
+        <label class="row"><span>漫游</span><input type="checkbox" id="tour" /></label>
+        <label class="row"><span>歌词</span><input type="checkbox" id="showLyric" checked /></label>
+        <h3>镜头与画面</h3>
+        <label class="row"><span>运镜</span>
+          <select id="cam" title="blend 版 = v2c 的运镜；手动 = 右上角机位、WASD 飞">
+            <option value="blend" selected>blend 版</option>
+            <option value="manual">手动</option>
+          </select></label>
+        <label class="row"><span>渲染管线</span>
+          <select id="pipe" title="web 版 = 网页原后期；blend 版 = v2c 的 post_final 合成；无阴影 = 角色不做明暗">
+            <option value="web" selected>web 版</option>
+            <option value="blend">blend 版</option>
+            <option value="blend-flat">blend 版 · 无阴影</option>
+            <option value="simple">简洁</option>
+          </select></label>
+        <label class="row"><span>画质</span>
+          <select id="quality">
+            <option value="low">流畅</option>
+            <option value="high" selected>高</option>
+            <option value="ultra">极致</option>
+          </select></label>
+        <h3>角色</h3>
+        <label class="row"><span>模型</span>
+          <select id="model" title="blend 版 = v2c 三渲二角色">
+            <option value="blend" selected>blend 版</option>
+            <option value="ref">身高参考</option>
+            <option value="hidden">隐藏</option>
+          </select></label>
+        <label class="row"><span>控制</span>
+          <select id="ctrlMode" title="跟随舞蹈：按 v2c 舞蹈动作；自由控制：WASD / 空格 / Shift，双击空格飞行，V 切视角">
+            <option value="dance" selected>跟随舞蹈</option>
+            <option value="free">自由控制</option>
+          </select></label>
+        <label class="row"><span>头发裙摆</span>
+          <select id="hairMode" title="物理 = 弹簧骨实时计算；K帧 = 动画里写好的关键帧">
+            <option value="phys" selected>物理</option>
+            <option value="key">K 帧</option>
+          </select></label>
+        <h3>自由控制的动作</h3>
+        <label class="row"><span>动作风格</span>
+          <select id="moveStyle" title="缺的动作用 Motifect 补">
+            <option value="girl" selected>少女 MMD</option>
+            <option value="hand">手搓</option>
+            <option value="ual">Quaternius</option>
+            <option value="motifect">Motifect</option>
+            <option value="import">导入</option>
+          </select></label>
+        <div class="row"><span>自行导入</span><button id="importBtn" title=".vmd .vrma .bvh .fbx .glb（只存在本机浏览器，不上传）">导入动作…</button></div>
+        <div class="row" id="fileRow" hidden><span>音频</span><label class="file" id="fileLabel">选择 mp3<input type="file" id="file" accept="audio/*" /></label></div>
+      </section>
     </div>
     <script type="module" src="./src/main.js"></script>
   </body>

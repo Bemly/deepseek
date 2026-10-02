@@ -30,7 +30,7 @@ attribute vec4 color;
 attribute float _part_kind;
 attribute float _face_layer;
 varying vec2 vUv0, vUv1, vUv2;
-varying vec3 vCap, vNormalV, vViewPos;
+varying vec3 vCap, vNormalV, vViewPos, vHeadW;
 varying float vPart, vFace;
 #include <common>
 #include <skinning_pars_vertex>
@@ -50,6 +50,7 @@ void main() {
   #include <project_vertex>
   vNormalV = normalize(transformedNormal);
   vViewPos = mvPosition.xyz;
+  vHeadW = (modelMatrix * vec4(transformed, 1.0)).xyz;
 }
 `
 
@@ -57,13 +58,14 @@ const fragmentShader = /* glsl */ `
 uniform sampler2D tAlbedo, tHand;
 uniform sampler2D tSceneDepth;   // blend 管线的角色层：和场景深度比较，被场景挡住的片元丢掉（= holdout 的遮挡）
 uniform float uDepthTest;
-uniform float uFlat;             // 1 = 无阴影版：色相/饱和度之后直接输出（= work/bake_no_shadow.py：不做卡通明暗、不加边缘光）
+uniform float uFlat;
+uniform vec4 uHeadClip;           // 第一人称裁掉头部（世界空间球）             // 1 = 无阴影版：色相/饱和度之后直接输出（= work/bake_no_shadow.py：不做卡通明暗、不加边缘光）
 uniform vec2 uViewport;
 uniform vec3 uKeyDir;            // 世界空间，指向光源
 uniform vec3 uShadowTint, uMidTint, uLightTint, uRimColor;
 uniform float uRimStrength;
 varying vec2 vUv0, vUv1, vUv2;
-varying vec3 vCap, vNormalV, vViewPos;
+varying vec3 vCap, vNormalV, vViewPos, vHeadW;
 varying float vPart, vFace;
 ${FACE_EXPRESSION_GLSL}
 vec3 rgb2hsv(vec3 c) {
@@ -89,6 +91,7 @@ float fresnelDielectric(float cosi, float eta) {
   return 0.5 * A * A * (1.0 + B * B);
 }
 void main() {
+  if (uHeadClip.w > 0.0 && distance(vHeadW, uHeadClip.xyz) < uHeadClip.w) discard;
   if (uDepthTest > 0.5 && gl_FragCoord.z > texture2D(tSceneDepth, gl_FragCoord.xy / uViewport).r + 2e-5 + 3.0 * fwidth(gl_FragCoord.z)) discard;
   vec3 alb = texture2D(tAlbedo, vUv0).rgb;
   alb = mix(alb, vCap, abs(vPart - 1.0) <= 0.1 ? 1.0 : 0.0);                       // CAP_IsCap

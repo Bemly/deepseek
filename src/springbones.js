@@ -1,5 +1,5 @@
-// 头发 / 裙摆 / 尾巴 / 耳朵 / 呆毛的简易弹簧骨（类似 VRM SpringBone），只在玩家模式用：
-// 舞蹈里这些骨骼的物理是 Blender 烘焙好的，玩家模式的移动片段只驱动身体，这里补上随动。
+// 头发 / 裙摆 / 尾巴 / 耳朵 / 呆毛的简易弹簧骨（类似 VRM SpringBone）。「物理」模式下舞蹈和自由控制都用它
+// （从静止姿势出发，按身体运动实时算），「K帧」模式下用动画里的关键帧（舞蹈里 Blender 烘焙好的）。
 // 每条链从根到梢做 verlet：尾端被动画方向拉回（刚度）、带阻尼和重力，长度固定，再用几个球体推开避免穿进身体。
 import * as THREE from 'three'
 
@@ -43,7 +43,7 @@ export function createSpringBones(model) {
       const child = b.children.find((c) => c.isBone)
       // 尾端（本地）：有子骨用子骨位置，梢骨沿父骨长度延长
       const tailLocal = child ? child.position.clone() : new THREE.Vector3(0, prevLen / (b.getWorldScale(_s).x || 1), 0)
-      joints.push({ bone: b, tailLocal, len: 0, stiff: p[1], drag: p[2], grav: p[3], follow: p[4], cur: new THREE.Vector3(), prev: new THREE.Vector3(), lastHead: new THREE.Vector3(), ready: false })
+      joints.push({ bone: b, tailLocal, len: 0, stiff: p[1], drag: p[2], grav: p[3], follow: p[4], restQ: b.quaternion.clone(), cur: new THREE.Vector3(), prev: new THREE.Vector3(), lastHead: new THREE.Vector3(), ready: false })
       prevLen = tailLocal.length() * (b.getWorldScale(_s).x || 1)
       b = child
     }
@@ -67,6 +67,8 @@ export function createSpringBones(model) {
       }
       for (const j of joints) {
         const b = j.bone
+        // 物理从静止姿势算（不叠在关键帧的头发动作上）
+        if (api.weight > 0) b.quaternion.slerp(j.restQ, api.weight)
         b.parent.updateWorldMatrix(true, false)
         // 动画给的世界朝向（父世界 × 本地动画旋转）
         b.parent.matrixWorld.decompose(_a, _pq, _s)

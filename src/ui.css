@@ -66,14 +66,11 @@ html, body { margin: 0; height: 100%; background: #04070f; color: var(--fg); ove
   text-align: center;
   pointer-events: none;
 }
-#fpBtn.on {
-  background: rgba(120, 170, 255, 0.35);
-}
 
 .import-panel {
   position: absolute;
   right: 16px;
-  bottom: 104px;
+  bottom: 70px;
   width: min(420px, calc(100vw - 32px));
   max-height: 46vh;
   overflow: auto;
@@ -111,3 +108,37 @@ html, body { margin: 0; height: 100%; background: #04070f; color: var(--fg); ove
   border-radius: 6px;
   padding: 2px 8px;
 }
+
+/* 底栏只留时间轴；其余都在设置面板里 */
+.bar { flex-wrap: nowrap; }
+.bar .scrub { flex: 1; min-width: 0; }
+.gear { font-size: 16px; line-height: 1; padding: 6px 9px !important; }
+.gear[aria-expanded='true'] { border-color: var(--accent); color: var(--accent); }
+.settings {
+  position: absolute;
+  right: 16px;
+  bottom: 70px;
+  width: min(320px, calc(100vw - 32px));
+  max-height: calc(100vh - 160px);
+  overflow: auto;
+  padding: 10px 14px 12px;
+  border-radius: 12px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+  color: var(--fg);
+  font-size: 13px;
+  display: grid;
+  gap: 6px;
+}
+.settings h3 { margin: 6px 0 0; font-size: 11px; font-weight: 600; letter-spacing: .08em; color: var(--muted); }
+.settings .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 30px; }
+.settings .row > span { color: var(--muted); }
+.settings select, .settings button, .settings .file {
+  background: rgba(255, 255, 255, .06); color: var(--fg); border: 1px solid var(--line); border-radius: 8px;
+  padding: 5px 9px; font: inherit; cursor: pointer; min-width: 130px;
+}
+.settings input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--accent); }
+@media (max-width: 640px) { .settings { right: 8px; bottom: 62px; } }
+
+.settings [hidden] { display: none !important; }

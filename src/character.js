@@ -9,6 +9,7 @@
 
 import * as THREE from 'three'
 import { createCharacterMaterial, loadFaceTrack, setLook } from './character-material.js'
+import { createSpringBones } from './springbones.js'
 
 export const BLEND_TO_WEB = 1 / 0.08 // 12.5，见 blend-camera.js
 export const BLEND_FPS = 120 // v2c 时间轴：第 f 帧 = 歌曲 (f-1)/120 秒
@@ -21,6 +22,18 @@ export const OUTLINE_WIDTH = 0.00125 * (1 / 0.08) // 描边宽度（web 单位�
 // 蒙皮在之后才作用，所以偏移会跟着骨骼一起转。宽度按模型本地坐标传入。
 // 描边壳和角色材质共用的深度测试 uniform（blend 管线里角色层要和场景深度比较）
 export const DEPTH_TEST = { tSceneDepth: { value: null }, uDepthTest: { value: 0 }, uViewport: { value: new THREE.Vector2(1, 1) } }
+// 第一人称时把镜头附近的头部（含刘海、耳朵）裁掉：世界空间球心 xyz、半径 w（0 = 关），身体和手照常显示
+export const HEAD_CLIP = { uHeadClip: { value: new THREE.Vector4(0, 0, 0, 0) } }
+// 给 MeshBasic 系材质（描边壳、holdout）加上头部裁剪
+export function addHeadClip(sh) {
+  Object.assign(sh.uniforms, HEAD_CLIP)
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', 'varying vec3 vHeadW;\n#include <common>')
+    .replace('#include <project_vertex>', '#include <project_vertex>\nvHeadW = (modelMatrix * vec4(transformed, 1.0)).xyz;')
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', 'uniform vec4 uHeadClip;\nvarying vec3 vHeadW;\n#include <common>')
+    .replace('void main() {', 'void main() {\n  if (uHeadClip.w > 0.0 && distance(vHeadW, uHeadClip.xyz) < uHeadClip.w) discard;')
+}
 
 export function addOutlineShell(mesh, widthLocal) {
   if (!mesh.geometry.getAttribute('normal') || !(widthLocal > 0)) return null
@@ -35,6 +48,7 @@ export function addOutlineShell(mesh, widthLocal) {
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', 'uniform sampler2D tSceneDepth;\nuniform float uDepthTest;\nuniform vec2 uViewport;\n#include <common>')
       .replace('void main() {', 'void main() {\n  if (uDepthTest > 0.5 && gl_FragCoord.z > texture2D(tSceneDepth, gl_FragCoord.xy / uViewport).r + 2e-5 + 3.0 * fwidth(gl_FragCoord.z)) discard;')
+    addHeadClip(sh)
   }
   mat.customProgramCacheKey = () => 'ds-outline'
   const shell = mesh.clone() // SkinnedMesh.clone 会共享 skeleton + bind 矩阵，正好
@@ -84,7 +98,10 @@ export function createCharacter(scene) {
     setPassMode(mode, depthTex = null, w = 1, h = 1) {
       if (!api.model) return
       const hold = mode === 'holdout'
-      if (!api._holdout) api._holdout = new THREE.MeshBasicMaterial({ color: 0x000000, fog: false })
+      if (!api._holdout) {
+        api._holdout = new THREE.MeshBasicMaterial({ color: 0x000000, fog: false })
+        api._holdout.onBeforeCompile = addHeadClip
+      }
       api.model.traverse((o) => {
         if (!o.isMesh) return
         if (!o.userData.passMat) o.userData.passMat = o.material
@@ -96,8 +113,21 @@ export function createCharacter(scene) {
     },
     // 歌曲时间的纯函数：骨骼姿态 + 表情 + 跟随场景主题的角色色调（world.update 之后调用）
     dancing: true, // false = 玩家模式接管（player.js），这里不再按歌曲时间摆姿势/表情
+    physics: true, // 头发/裙摆/尾巴/耳朵：true = 弹簧骨物理（从静止姿势算），false = 关键帧（舞蹈里烘焙好的）
+    _lastT: null,
     update(t, world) {
-      if (api.dancing) api.pose(t)
+      if (api.dancing) {
+        api.pose(t)
+        if (api.springs) {
+          // 舞蹈模式的物理：按歌曲时间差步进，跳时间/倒放就重置
+          const dt = api._lastT == null ? 0 : t - api._lastT
+          if (dt < 0 || dt > 0.25) api.springs.reset()
+          api.springs.weight = api.physics ? 1 : 0
+          api.model.updateMatrixWorld(true)
+          api.springs.update(Math.max(0, Math.min(dt, 1 / 20)))
+        }
+        api._lastT = t
+      }
       if (!api.material) return
       if (api.dancing) api.face?.apply(api.material, t)
       const m = world?.mix
@@ -114,7 +144,7 @@ export function createCharacter(scene) {
       ])
       const model = gltf.scene
       model.scale.setScalar(BLEND_TO_WEB)
-      Object.assign(mat.uniforms, DEPTH_TEST)
+      Object.assign(mat.uniforms, DEPTH_TEST, HEAD_CLIP)
       api.material = mat
       api.face = face
       const outlineLocal = outlineWidth > 0 ? outlineWidth / BLEND_TO_WEB : 0
@@ -129,6 +159,7 @@ export function createCharacter(scene) {
       })
       group.add(model)
       api.model = model
+      api.springs = createSpringBones(model) // 在绑定姿势下建，记下各链的静止旋转
       api.ready = true
       group.visible = true
       try {

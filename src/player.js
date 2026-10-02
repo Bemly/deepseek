@@ -10,13 +10,14 @@
 //   手搓      这个项目自己做的二次元少女动作 —— tools/handmade_moves.py
 //   导入      你自己导入的 VMD / VRMA / BVH / FBX / GLB（只在你浏览器里，不进仓库）—— src/motion-import.js
 import * as THREE from 'three'
-import { createSpringBones } from './springbones.js'
+import { HEAD_CLIP } from './character.js'
 
 const M = 12.5 // 1 米 = 12.5 web 单位（blend → web）
 const G = 20 // 重力 m/s²
 const JUMP_V = 6.2 // 起跳速度 → 约 0.95 m 高
 const WALK = 0.9, RUN = 3.0, CROUCH = 0.8 // m/s（走 = 小碎步，片段 0.35 m/s × 约 2.6 倍步频）
 const FLY = 6, FLY_SPRINT = 14, FLY_V = 5 // m/s
+const FLY_MAX_BOOST = 32 // 按住移动时每 2 秒速度翻倍（和手动机位一样），最高 32 倍
 const DOUBLE_TAP = 0.3 // 秒
 // Motifect 的 jump_standing（30fps）：44 帧前是蹲下蓄力，47 离地，53 腾空最高，59 落地，72 站稳 → 切成三段
 const MOTIFECT_JUMP = { jump_start: [44 / 30, 53 / 30], jump_air: [53 / 30, 54 / 30], jump_land: [59 / 30, 72 / 30] }
@@ -67,6 +68,8 @@ export function createPlayer({ character, camera, canvas, hud }) {
   let grounded = true
   let flying = false
   let sprint = false
+  let flyHold = 0 // 飞行中按住移动键的时长
+  let boost = 1
   let view = 'fp'
   let mixer = null
   let acts = {}
@@ -142,7 +145,7 @@ export function createPlayer({ character, camera, canvas, hud }) {
         if (i >= 0) hipsBind = new THREE.Quaternion().setFromRotationMatrix(o.skeleton.boneInverses[i].clone().invert())
       }
     })
-    springs = createSpringBones(character.model)
+    springs = character.springs // 角色模块建的弹簧骨（舞蹈/自由共用）
     api.springs = springs
     // 特色动作：emotes.glb（水做的两段 + 旧三渲二的挥手/比心）+ 从已加载的 v2c 舞蹈里截的四段
     const [eg, emeta] = await Promise.all([
@@ -283,13 +286,14 @@ export function createPlayer({ character, camera, canvas, hud }) {
       character.model.position.set(0, 0, 0)
       character.model.rotation.set(0, 0, 0)
       character.group.visible = true
+      HEAD_CLIP.uHeadClip.value.w = 0
       if (document.pointerLockElement === canvas) document.exitPointerLock()
       hud?.('')
     },
     help() {
       const v = { fp: '第一人称', back: '背后', front: '正面' }[view]
       const keyOf = (i) => (i < 9 ? String(i + 1) : i === 9 ? '0' : null)
-      return `${v} · ${STYLES[style].label}${flying ? ' · 飞行中' : ''} ｜ WASD 移动 · 空格 跳 · Shift 蹲 · Ctrl/双击W 跑 · 双击空格 飞行 · V 视角 · 点画面锁定鼠标\n特色动作：${emotes
+      return `${v} · ${STYLES[style].label}${flying ? ` · 飞行中${boost >= 2 ? ` ×${Math.floor(boost)}` : ''}` : ''} ｜ WASD 移动 · 空格 跳 · Shift 蹲 · Ctrl/双击W 跑 · 双击空格 飞行 · V 视角 · 点画面锁定鼠标\n特色动作：${emotes
         .map((e, i) => keyOf(i) && `${keyOf(i)} ${e.label}`)
         .filter(Boolean)
         .join('  ')}`
@@ -360,13 +364,18 @@ export function createPlayer({ character, camera, canvas, hud }) {
       if (il > 0 && emote) stopEmote()
       if (!iz || iz < 0) sprint = keys.has('ControlLeft') || keys.has('ControlRight')
       if (flying) {
-        const top = sprint ? FLY_SPRINT : FLY
-        const ax = il ? 10 : 4 // 有输入时加速，松手后阻尼减速
+        const iy = (keys.has('Space') ? 1 : 0) - (crouchKey ? 1 : 0)
+        // 按住移动（水平或升降）越久越快：每 2 秒翻倍，松手归零
+        flyHold = il || iy ? flyHold + dt : 0
+        boost = Math.min(FLY_MAX_BOOST, Math.pow(2, flyHold / 2))
+        const top = (sprint ? FLY_SPRINT : FLY) * boost
+        const ax = (il ? 10 : 4) * boost // 有输入时加速，松手后阻尼减速
         vel.x = approach(vel.x, wx * top * (il ? 1 : 0), ax * dt * Math.max(1, Math.abs(vel.x)))
         vel.z = approach(vel.z, wz * top * (il ? 1 : 0), ax * dt * Math.max(1, Math.abs(vel.z)))
-        const iy = (keys.has('Space') ? 1 : 0) - (crouchKey ? 1 : 0)
-        vel.y = approach(vel.y, iy * FLY_V * (sprint ? 1.8 : 1), (iy ? 12 : 6) * dt)
+        vel.y = approach(vel.y, iy * FLY_V * (sprint ? 1.8 : 1) * boost, (iy ? 12 : 6) * boost * dt)
       } else {
+        flyHold = 0
+        boost = 1
         const top = crouchKey ? CROUCH : sprint ? RUN : WALK
         const acc = grounded ? (il ? 14 : 18) : 4
         vel.x = approach(vel.x, wx * top * (il ? 1 : 0), acc * dt)
@@ -403,13 +412,14 @@ export function createPlayer({ character, camera, canvas, hud }) {
       character.model.position.copy(p)
       character.model.rotation.set(0, charYaw - (emote?.e.yaw || 0), 0)
       // 头发/裙摆/尾巴随动；舞蹈里截的特色动作自带烘焙物理，渐变关掉
-      const baked = emote && (emote.e.dance || emote.e.name.startsWith('emote_bbw'))
-      springs.weight = approach(springs.weight, baked ? 0 : 1, dt * 3)
+      // 「物理」：头发/裙摆从静止姿势按身体运动算；「K帧」：用动作里的关键帧（舞蹈片段带烘焙物理，移动片段是静止的）
+      springs.weight = approach(springs.weight, character.physics ? 1 : 0, dt * 3)
       character.model.updateMatrixWorld(true)
       springs.update(dt)
       placeCamera()
-      if (api._lastHelp !== flying) {
-        api._lastHelp = flying
+      const hk = `${flying}|${Math.floor(boost)}`
+      if (api._lastHelp !== hk) {
+        api._lastHelp = hk
         hud?.(api.help())
       }
     },
@@ -585,7 +595,10 @@ export function createPlayer({ character, camera, canvas, hud }) {
       camera.lookAt(eye.clone().add(dir))
       camera.fov = 72
       camera.near = 0.04 * M
-      character.group.visible = false // 第一人称看不到自己（像 MC）
+      // 只裁掉头部（含刘海、耳朵），低头能看到身体、抬手能看到手
+      const c = head ? head.getWorldPosition(new THREE.Vector3()) : eye
+      HEAD_CLIP.uHeadClip.value.set(c.x, c.y + 0.09 * M, c.z, 0.17 * M)
+      character.group.visible = true
     } else {
       const pivot = p.clone().add(new THREE.Vector3(0, 1.15 * M, 0))
       const dist = 3.4 * M
@@ -595,6 +608,7 @@ export function createPlayer({ character, camera, canvas, hud }) {
       camera.lookAt(pivot)
       camera.fov = 50
       camera.near = 0.1 * M
+      HEAD_CLIP.uHeadClip.value.w = 0
       character.group.visible = true
     }
     camera.far = 80000

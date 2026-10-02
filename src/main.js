@@ -124,8 +124,9 @@ async function main() {
     camera,
     canvas,
     hud: (text) => {
-      $('playerHud').hidden = !text
-      $('playerHud').textContent = text
+      const on = player?.active && !!text
+      $('playerHud').hidden = !on
+      $('playerHud').textContent = on ? text : ''
     },
   })
   const styleSel = $('moveStyle')
@@ -148,18 +149,42 @@ async function main() {
   window.__importer = importer
   window.__player = player // 调试/自动化用
   window.__character = character
-  $('fpBtn').onclick = async () => {
-    if (player.active) player.exit()
-    else {
+  // 设置面板（底栏只留时间轴）
+  const settings = $('settings')
+  const settingsBtn = $('settingsBtn')
+  const showSettings = (on) => {
+    settings.hidden = !on
+    settingsBtn.setAttribute('aria-expanded', String(on))
+  }
+  settingsBtn.onclick = () => showSettings(settings.hidden)
+  window.addEventListener('pointerdown', (e) => {
+    if (!settings.hidden && !settings.contains(e.target) && e.target !== settingsBtn) showSettings(false)
+  })
+  // 角色控制：跟随舞蹈（v2c 动作）/ 自由控制（玩家模式，歌曲和场景时间轴照走）
+  const ctrlSel = $('ctrlMode')
+  ctrlSel.onchange = async () => {
+    ctrlSel.blur()
+    if (ctrlSel.value === 'free' && !player.active) {
       modelSel.value = 'blend'
       applyModelMode()
       await player.enter()
+      if (!player.active) {
+        ctrlSel.value = 'dance' // 模型还没加载好
+        return
+      }
       restoreImports()
+      showSettings(false)
       canvas.requestPointerLock?.()
-    }
-    $('fpBtn').classList.toggle('on', player.active)
-    $('fpBtn').textContent = player.active ? '退出第一人称' : '第一人称'
-    $('fpBtn').blur()
+    } else if (ctrlSel.value === 'dance' && player.active) player.exit()
+  }
+  // 头发/裙摆/尾巴/耳朵：物理（弹簧骨实时算）/ K帧（动画里的关键帧）
+  const hairSel = $('hairMode')
+  hairSel.value = params.get('hair') || store.get('ds-hair-mode') || 'phys'
+  character.physics = hairSel.value === 'phys'
+  hairSel.onchange = () => {
+    character.physics = hairSel.value === 'phys'
+    store.set('ds-hair-mode', hairSel.value)
+    hairSel.blur()
   }
   canvas.addEventListener('click', () => {
     if (player.active && document.pointerLockElement !== canvas) canvas.requestPointerLock?.()
@@ -233,13 +258,13 @@ async function main() {
   audio.addEventListener('canplay', () => (audioOk = true))
   audio.addEventListener('error', () => {
     audioOk = false
-    $('fileLabel').hidden = false
+    $('fileRow').hidden = false
   })
   $('file').onchange = (e) => {
     const f = e.target.files[0]
     if (!f) return
     audio.src = URL.createObjectURL(f)
-    $('fileLabel').hidden = true
+    $('fileRow').hidden = true
   }
 
   let playing = false
