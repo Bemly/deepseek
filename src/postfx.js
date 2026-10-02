@@ -353,12 +353,13 @@ export function createPostFX(renderer, scene, camera, { bloom = true, world = nu
   composer.addPass(grade)
   composer.addPass(new OutputPass())
 
-  // 渲染管线：blend（默认）= v2c 的 post_final.py 复刻（角色单独一层，见 BlendPipeline）；
-  // web = 仓库原本的网页后期链（角色和场景一起过泛光/ACES）；simple = 关泛光/故障/闪白/暗角的干净版。只管后期，不碰场景。
+  // 渲染管线：web（默认）= 仓库原本的网页后期链（角色和场景一起过泛光/ACES）；
+  // blend = v2c 的 post_final.py 复刻（角色单独一层，见 BlendPipeline）；blend-flat = 同上但角色无阴影（无卡通明暗/边缘光/投影）；
+  // simple = 关泛光/故障/闪白/暗角的干净版。只管后期，不碰场景。
   const blendPipe = new BlendPipeline(renderer, scene, renderPass, bloomPass, world)
-  let pipeline = 'blend'
+  let pipeline = 'web'
   function setPipeline(name) {
-    pipeline = name === 'simple' || name === 'web' ? name : 'blend'
+    pipeline = ['simple', 'web', 'blend', 'blend-flat'].includes(name) ? name : 'web'
     const simple = pipeline === 'simple'
     bloomPass.enabled = simple ? false : bloom
     clamp.uniforms.uMax.value = simple ? 1e5 : 5.0
@@ -387,7 +388,8 @@ export function createPostFX(renderer, scene, camera, { bloom = true, world = nu
     render(state) {
       let themeExp = 1
       if (world) themeExp = world.mix ? THREE.MathUtils.lerp(world.exposureOf(world.mix.a), world.exposureOf(world.mix.b), world.mix.p) : world.exposureOf(world.applied)
-      if (pipeline === 'blend') {
+      blendPipe.character?.setFlat(pipeline === 'blend-flat')
+      if (pipeline === 'blend' || pipeline === 'blend-flat') {
         blendPipe.render(state, themeExp)
         return
       }

@@ -72,6 +72,14 @@ export function createCharacter(scene) {
     danceReady: false, // 动作就绪
     failed: false,
     pose(_t) {},
+    // 无阴影版（管线·blend版·无阴影）：材质不做明暗/边缘光，也不往场景投影
+    setFlat(flat) {
+      if (!api.material) return
+      api.material.uniforms.uFlat.value = flat ? 1 : 0
+      api.model?.traverse((o) => {
+        if (o.isMesh && !o.name.endsWith('__outline')) o.castShadow = !flat
+      })
+    },
     // blend 管线：'holdout' = 场景层里只写深度的黑色剪影（v2c 角色在场景层是 holdout）；'char' = 角色层；'normal' = 普通
     setPassMode(mode, depthTex = null, w = 1, h = 1) {
       if (!api.model) return

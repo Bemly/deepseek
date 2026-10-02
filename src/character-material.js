@@ -57,6 +57,7 @@ const fragmentShader = /* glsl */ `
 uniform sampler2D tAlbedo, tHand;
 uniform sampler2D tSceneDepth;   // blend 管线的角色层：和场景深度比较，被场景挡住的片元丢掉（= holdout 的遮挡）
 uniform float uDepthTest;
+uniform float uFlat;             // 1 = 无阴影版：色相/饱和度之后直接输出（= work/bake_no_shadow.py：不做卡通明暗、不加边缘光）
 uniform vec2 uViewport;
 uniform vec3 uKeyDir;            // 世界空间，指向光源
 uniform vec3 uShadowTint, uMidTint, uLightTint, uRimColor;
@@ -97,6 +98,11 @@ void main() {
   hsv.y = clamp(hsv.y * 1.065, 0.0, 1.0);
   hsv.z *= 1.045;
   vec3 col = hsv2rgb(hsv);
+  if (uFlat > 0.5) {
+    gl_FragColor = vec4(col, 1.0);
+    #include <colorspace_fragment>
+    return;
+  }
   float skin = clamp((face.r - face.b - 0.015) / (0.16 - 0.015), 0.0, 1.0);        // Soft Face：R-B 映射
   vec3 N = normalize(vNormalV) * (gl_FrontFacing ? 1.0 : -1.0);
   vec3 L = normalize((viewMatrix * vec4(uKeyDir, 0.0)).xyz);
@@ -132,6 +138,7 @@ export async function createCharacterMaterial(base = './models/tex/') {
     uFaceIrisScale: { value: 1 },
     tSceneDepth: { value: null },
     uDepthTest: { value: 0 },
+    uFlat: { value: 0 },
     uViewport: { value: new THREE.Vector2(1, 1) },
   }
   await Promise.all(

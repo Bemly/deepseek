@@ -42,9 +42,10 @@
           <option value="blend" selected>运镜·blend版</option>
           <option value="manual">运镜·手动</option>
         </select>
-        <select id="pipe" aria-label="渲染管线" title="渲染管线（默认 blend 版 = v2c 的 post_final 合成：角色单独一层，不过 ACES）">
-          <option value="blend" selected>管线·blend版</option>
-          <option value="web">管线·web原版</option>
+        <select id="pipe" aria-label="渲染管线" title="渲染管线（默认 web 版；blend 版 = v2c 的 post_final 合成；无阴影 = 角色不做明暗）">
+          <option value="web" selected>管线·web版</option>
+          <option value="blend">管线·blend版</option>
+          <option value="blend-flat">管线·blend版·无阴影</option>
           <option value="simple">管线·简洁</option>
         </select>
         <select id="quality" aria-label="画质">

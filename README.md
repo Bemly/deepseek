@@ -32,11 +32,12 @@ npm run dev   # 仓库自带 public/audio/let-me-go.mp3；也可以替换或在�
 
 - P 播放/暂停，←/→ 快进快退 5 秒，1–7 切机位，H 隐藏界面；手动运镜下 WASD 前后左右、空格上升、Shift 下降
 - 右上角机位：正面 / 近景 / 全景 / 城市 / 侧面 / 背面 / 俯瞰；「漫游」绕舞台慢转
-- 底栏三个下拉框都默认「blend 版」，即和 `LetMeGo-dschan_v2c.blend` 渲染的成片一致（只换角色/运镜/后期，场景不动）：
+- 底栏三个下拉框：模型、运镜默认「blend 版」，管线默认「web 版」（只换角色/运镜/后期，场景不动）：
   - **模型**：blend 版 = v2c 的角色、舞蹈、口型/笑容/眨眼、卡通材质与描边；也可切「身高参考」（20 单位高的半透明人形）或隐藏。数据见 `public/models/README.md`
   - **运镜**：blend 版 = v2c 的 DS_Cam / DS_CamOrtho（含 104 秒后跟脸的 v3 运镜，`public/data/camera-blend-v3.json`）；「手动」才用右上角机位和漫游
-  - **管线**：blend 版 = v2c 的 `post_final.py`（角色单独一层盖在 ACES 之后的场景上）；「web原版」是仓库原来的后期链，「简洁」关掉泛光/故障/暗角
-- URL 参数：`?model=blend|ref|hidden`、`?cam=blend|manual`、`?pipe=blend|web|simple`、`?outline=0` 关角色描边
+  - **管线**：web 版（默认）= 仓库原来的后期链；blend 版 = v2c 的 `post_final.py`（角色单独一层盖在 ACES 之后的场景上）；
+    blend 版·无阴影 = 同上，角色不做卡通明暗/边缘光、不投影（和 `work/bake_no_shadow.py` 的无阴影版一致）；「简洁」关掉泛光/故障/暗角
+- URL 参数：`?model=blend|ref|hidden`、`?cam=blend|manual`、`?pipe=web|blend|blend-flat|simple`、`?outline=0` 关角色描边
 - 左上角切场景（手动切是 2.4 秒溶解过渡）；勾上「按段落切场景」则按 `DEMO_THEME_SCHEDULE` 跟着歌曲时间自动切
 - URL 参数：`?t=51.4` 从某秒开始，`?view=wide` 初始机位，`?theme=atlantis` 初始场景，`?q=low|high|ultra` 画质，`?ui=0` 隐藏界面，`?bloom=0` 关泛光
 

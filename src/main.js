@@ -86,11 +86,12 @@ async function main() {
   camSel.onchange = () => setCamMode(camSel.value)
   // 渲染管线：默认 blend 版（v2c 合成），simple 只做对比
   const pipeSel = $('pipe')
-  pipeSel.value = params.get('pipe') || store.get('ds-stage-pipe') || 'blend'
+  // 默认 web 版（换了存储键，之前存过的 blend 选择不再顶替默认）
+  pipeSel.value = params.get('pipe') || store.get('ds-stage-pipe2') || 'web'
   post.setPipeline(pipeSel.value)
   pipeSel.onchange = () => {
     post.setPipeline(pipeSel.value)
-    store.set('ds-stage-pipe', pipeSel.value)
+    store.set('ds-stage-pipe2', pipeSel.value)
   }
   $('tour').addEventListener('change', (e) => {
     if (e.target.checked) setCamMode('manual')
