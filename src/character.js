@@ -19,15 +19,22 @@ export const OUTLINE_WIDTH = 0.00125 * (1 / 0.08) // 描边宽度（web 单位�
 // 背面膨胀壳描边（blend 侧 TOON Outline 修改器的 web 复刻）：
 // 把 mesh 克隆一份，翻到背面显示，顶点沿法线外扩。位移写在 begin_vertex 里，
 // 蒙皮在之后才作用，所以偏移会跟着骨骼一起转。宽度按模型本地坐标传入。
+// 描边壳和角色材质共用的深度测试 uniform（blend 管线里角色层要和场景深度比较）
+export const DEPTH_TEST = { tSceneDepth: { value: null }, uDepthTest: { value: 0 }, uViewport: { value: new THREE.Vector2(1, 1) } }
+
 export function addOutlineShell(mesh, widthLocal) {
   if (!mesh.geometry.getAttribute('normal') || !(widthLocal > 0)) return null
-  const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(...OUTLINE_COLOR, THREE.LinearSRGBColorSpace), side: THREE.BackSide })
+  const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(...OUTLINE_COLOR, THREE.LinearSRGBColorSpace), side: THREE.BackSide, fog: false })
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uOutlineW = { value: widthLocal }
+    Object.assign(sh.uniforms, DEPTH_TEST)
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', 'uniform float uOutlineW;\n#include <common>')
       // 用 bind 空间的 normal 属性外扩（蒙皮之后会跟着骨骼转）；MeshBasic 非蒙皮时没有 objectNormal
       .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += normalize(normal) * uOutlineW;')
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', 'uniform sampler2D tSceneDepth;\nuniform float uDepthTest;\nuniform vec2 uViewport;\n#include <common>')
+      .replace('void main() {', 'void main() {\n  if (uDepthTest > 0.5 && gl_FragCoord.z > texture2D(tSceneDepth, gl_FragCoord.xy / uViewport).r + 2e-5 + 3.0 * fwidth(gl_FragCoord.z)) discard;')
   }
   mat.customProgramCacheKey = () => 'ds-outline'
   const shell = mesh.clone() // SkinnedMesh.clone 会共享 skeleton + bind 矩阵，正好
@@ -65,6 +72,20 @@ export function createCharacter(scene) {
     danceReady: false, // 动作就绪
     failed: false,
     pose(_t) {},
+    // blend 管线：'holdout' = 场景层里只写深度的黑色剪影（v2c 角色在场景层是 holdout）；'char' = 角色层；'normal' = 普通
+    setPassMode(mode, depthTex = null, w = 1, h = 1) {
+      if (!api.model) return
+      const hold = mode === 'holdout'
+      if (!api._holdout) api._holdout = new THREE.MeshBasicMaterial({ color: 0x000000, fog: false })
+      api.model.traverse((o) => {
+        if (!o.isMesh) return
+        if (!o.userData.passMat) o.userData.passMat = o.material
+        o.material = hold ? api._holdout : o.userData.passMat
+      })
+      DEPTH_TEST.uDepthTest.value = mode === 'char' && depthTex ? 1 : 0
+      DEPTH_TEST.tSceneDepth.value = depthTex
+      DEPTH_TEST.uViewport.value.set(w, h)
+    },
     // 歌曲时间的纯函数：骨骼姿态 + 表情 + 跟随场景主题的角色色调（world.update 之后调用）
     update(t, world) {
       api.pose(t)
@@ -84,6 +105,7 @@ export function createCharacter(scene) {
       ])
       const model = gltf.scene
       model.scale.setScalar(BLEND_TO_WEB)
+      Object.assign(mat.uniforms, DEPTH_TEST)
       api.material = mat
       api.face = face
       const outlineLocal = outlineWidth > 0 ? outlineWidth / BLEND_TO_WEB : 0

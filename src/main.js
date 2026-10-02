@@ -114,6 +114,7 @@ async function main() {
   scene.add(ref)
   // 模型：默认 blend 版（v2c 三渲二角色），只在预览里出现，不碰场景
   const character = createCharacter(scene)
+  post.setCharacter(character)
   const modelSel = $('model')
   modelSel.value =
     params.get('model') ||

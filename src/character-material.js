@@ -55,6 +55,9 @@ void main() {
 
 const fragmentShader = /* glsl */ `
 uniform sampler2D tAlbedo, tHand;
+uniform sampler2D tSceneDepth;   // blend 管线的角色层：和场景深度比较，被场景挡住的片元丢掉（= holdout 的遮挡）
+uniform float uDepthTest;
+uniform vec2 uViewport;
 uniform vec3 uKeyDir;            // 世界空间，指向光源
 uniform vec3 uShadowTint, uMidTint, uLightTint, uRimColor;
 uniform float uRimStrength;
@@ -85,6 +88,7 @@ float fresnelDielectric(float cosi, float eta) {
   return 0.5 * A * A * (1.0 + B * B);
 }
 void main() {
+  if (uDepthTest > 0.5 && gl_FragCoord.z > texture2D(tSceneDepth, gl_FragCoord.xy / uViewport).r + 2e-5 + 3.0 * fwidth(gl_FragCoord.z)) discard;
   vec3 alb = texture2D(tAlbedo, vUv0).rgb;
   alb = mix(alb, vCap, abs(vPart - 1.0) <= 0.1 ? 1.0 : 0.0);                       // CAP_IsCap
   alb = mix(alb, texture2D(tHand, vUv1).rgb, abs(vPart - 2.0) <= 0.1 ? 1.0 : 0.0);  // HAND_IsHand
@@ -126,6 +130,9 @@ export async function createCharacterMaterial(base = './models/tex/') {
     uFaceIrisR: { value: new THREE.Vector2() },
     uFaceIrisL: { value: new THREE.Vector2() },
     uFaceIrisScale: { value: 1 },
+    tSceneDepth: { value: null },
+    uDepthTest: { value: 0 },
+    uViewport: { value: new THREE.Vector2(1, 1) },
   }
   await Promise.all(
     Object.entries(TEX).map(async ([u, name]) => {
