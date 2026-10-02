@@ -3,7 +3,12 @@
 //   双击空格 进入/退出飞行（像 MC）：飞行时按住空格上升、Shift 下降，有加速度和阻尼
 //   V 切换 第一人称 / 背后第三人称 / 正面第三人称 · 1–8 特色动作 · 鼠标看（点画面锁定指针，Esc 释放）
 // 头发/裙摆/尾巴/耳朵用弹簧骨随动（springbones.js）。
-// 动作：public/data/moves.glb（tools/retarget_bvh.py 把 BVH 重定向到 v2c 骨架，原地播放），速度见 moves.json。
+// 动作风格（可切换，缺的槽位回退到 Motifect）：
+//   少女MMD  向前走 Chibi walk（tweekcrystal）、向前跑 女の子走り（@fuudo_food_0309）—— tools/retarget_vmd.py
+//   Motifect 45 段 AI 动捕移动包里的 18 段 —— tools/retarget_bvh.py
+//   Quaternius Universal Animation Library（CC0）—— tools/retarget_glb.py
+//   手搓      这个项目自己做的二次元少女动作 —— tools/handmade_moves.py
+//   导入      你自己导入的 VMD / VRMA / BVH / FBX / GLB（只在你浏览器里，不进仓库）—— src/motion-import.js
 import * as THREE from 'three'
 import { createSpringBones } from './springbones.js'
 
@@ -13,8 +18,23 @@ const JUMP_V = 6.2 // 起跳速度 → 约 0.95 m 高
 const WALK = 0.9, RUN = 3.0, CROUCH = 0.8 // m/s（走 = 小碎步，片段 0.35 m/s × 约 2.6 倍步频）
 const FLY = 6, FLY_SPRINT = 14, FLY_V = 5 // m/s
 const DOUBLE_TAP = 0.3 // 秒
-// jump 片段（jump_standing，30fps）：44 帧前是蹲下蓄力，47 离地，53 腾空最高，59 落地，72 站稳
-const JUMP_T = { start: 44 / 30, hold: 53 / 30, land: 59 / 30, end: 72 / 30 }
+// Motifect 的 jump_standing（30fps）：44 帧前是蹲下蓄力，47 离地，53 腾空最高，59 落地，72 站稳 → 切成三段
+const MOTIFECT_JUMP = { jump_start: [44 / 30, 53 / 30], jump_air: [53 / 30, 54 / 30], jump_land: [59 / 30, 72 / 30] }
+const PACKS = {
+  motifect: { glb: './data/moves.glb', json: './data/moves.json' },
+  vmd: { glb: './data/moves-vmd.glb', json: './data/moves-vmd.json' },
+  ual: { glb: './data/moves-ual.glb', json: './data/moves-ual.json' },
+  hand: { glb: './data/moves-hand.glb', json: './data/moves-hand.json' },
+}
+const LOCO = ['idle', 'idle2', 'walk', 'walk_back', 'walk_l', 'walk_r', 'run', 'run_back', 'run_l', 'run_r', 'jump_start', 'jump_air', 'jump_land', 'fall_land', 'crouch', 'crouch_fwd', 'crouch_back']
+const mapOf = (pack, slots) => Object.fromEntries(slots.map((x) => (Array.isArray(x) ? [x[0], `${pack}/${x[1]}`] : [x, `${pack}/${x}`])))
+export const STYLES = {
+  girl: { label: '少女MMD', map: mapOf('vmd', [['walk', 'chibi_walk'], ['run', 'girl_run']]) },
+  motifect: { label: 'Motifect', map: {} },
+  ual: { label: 'Quaternius', map: mapOf('ual', ['idle', 'idle2', 'walk', 'run', 'jump_start', 'jump_air', 'jump_land', ['fall_land', 'jump_land'], 'crouch', 'crouch_fwd']) },
+  hand: { label: '手搓', map: mapOf('hand', ['idle', ['idle2', 'idle'], 'walk', 'run', 'jump_start', 'jump_air', 'jump_land', ['fall_land', 'jump_land'], 'crouch', 'crouch_fwd']) },
+  import: { label: '导入', map: {} },
+}
 
 // 特色动作（数字键 1–8）：前两个来自之前的三渲二版本，中间四段从 v2c 舞蹈里截（带当时的表情），最后两段是《我的悲伤是水做的》
 const EMOTES = [
@@ -26,9 +46,9 @@ const EMOTES = [
   { name: 'emote_lmg_honey', label: '举手', dance: [62.0, 67.0] },
   { name: 'emote_bbw_chorus', label: '水·副歌' },
   { name: 'emote_bbw_handsup', label: '水·举手' },
+  { name: 'hand/emote_cheer', label: '欢呼（手搓）', fresh: true, meta: { face_fixed: [15, 15, 11, 0, 0, 0, 0, 1] } },
+  { name: 'ual/dance', label: '跳舞（Quaternius）', fresh: true, loop: 2, meta: { face_fixed: [20, 20, 11, 0, 0, 0, 0, 1] } },
 ]
-
-const VMD_PICK = { walk: 'chibi_walk', run: 'girl_run' }
 
 const _v = new THREE.Vector3()
 const _q = new THREE.Quaternion()
@@ -50,9 +70,10 @@ export function createPlayer({ character, camera, canvas, hud }) {
   let view = 'fp'
   let mixer = null
   let acts = {}
-  let meta = {}
-  let base = null // 当前循环动作名
-  let jump = null // { phase: 'up'|'air'|'land', t }
+  let base = null // 当前循环动作（pack/clip）
+  let jump = null // { phase: 'up'|'air'|'land', k: 当前动作 }
+  let style = 'girl'
+  const metas = {}
   let emote = null // { name, t }
   let blink = { next: 2, t: -1 }
   let idleAlt = 0
@@ -60,39 +81,60 @@ export function createPlayer({ character, camera, canvas, hud }) {
   let hipsBind = null
   let springs = null
 
-  function fade(name, dur = 0.22, timeScale = 1) {
-    const a = acts[name]
+  // 槽位 → 当前风格里的动作（缺了就用 Motifect 的）
+  function key(slot) {
+    const m = STYLES[style]?.map[slot]
+    if (m && acts[m]) return m
+    if (acts[`motifect/${slot}`]) return `motifect/${slot}`
+    return slot === 'fall_land' ? key('jump_land') : null
+  }
+  function fade(slot, dur = 0.22, timeScale = 1) {
+    const k = key(slot)
+    const a = k && acts[k]
     if (!a) return
     a.timeScale = timeScale
-    if (base === name) return
+    if (base === k) return
     const prev = base && acts[base]
     a.reset().setEffectiveWeight(1).fadeIn(dur).play()
     if (prev) prev.fadeOut(dur)
-    base = name
+    base = k
+  }
+  function addClip(k, clip, info) {
+    clip.name = k
+    const a = mixer.clipAction(clip)
+    const n = k.split('/').pop()
+    if (/^(jump_start|jump_land|fall_land|land|jump|crouch_rise)$/.test(n) || n.startsWith('emote_')) {
+      a.setLoop(THREE.LoopOnce, 1)
+      a.clampWhenFinished = true
+    }
+    acts[k] = a
+    const [pack, name] = k.split('/')
+    ;(metas[pack] ||= {})[name] = info
+  }
+  async function loadPack(pack, loader) {
+    const P = PACKS[pack]
+    const [g, info] = await Promise.all([loader.loadAsync(P.glb), fetch(P.json).then((r) => r.json())])
+    const seen = new Set()
+    for (const clip of g.animations) {
+      if (seen.has(clip.name)) continue
+      seen.add(clip.name)
+      const name = clip.name
+      addClip(`${pack}/${name}`, clip, info[name])
+      if (pack === 'motifect' && name === 'jump') {
+        for (const [slot, [t0, t1]] of Object.entries(MOTIFECT_JUMP)) {
+          const c = new THREE.AnimationClip(slot, -1, clip.tracks.map((tr) => tr.clone().trim(t0, t1).shift(-t0)))
+          addClip(`motifect/${slot}`, c, { speed: [0, 0], duration: t1 - t0 })
+        }
+      }
+    }
   }
 
   async function load() {
     if (mixer) return
-    const [{ GLTFLoader }, info, vinfo] = await Promise.all([
-      import('three/addons/loaders/GLTFLoader.js'),
-      fetch('./data/moves.json').then((r) => r.json()),
-      fetch('./data/moves-vmd.json').then((r) => r.json()).catch(() => ({})),
-    ])
-    const g = await new GLTFLoader().loadAsync('./data/moves.glb')
-    // 少女向的 MMD 走/跑（tools/retarget_vmd.py）：向前走用 Chibi walk 小碎步，向前跑用「女の子走り」
-    const vg = await new GLTFLoader().loadAsync('./data/moves-vmd.glb').catch(() => null)
-    if (vg) {
-      for (const [slot, src] of Object.entries(VMD_PICK)) {
-        const clip = vg.animations.find((c) => c.name === src)
-        if (!clip) continue
-        const i = g.animations.findIndex((c) => c.name === slot)
-        clip.name = slot
-        if (i >= 0) g.animations[i] = clip
-        else g.animations.push(clip)
-        info[slot] = vinfo[src] || info[slot]
-      }
-    }
-    meta = info
+    const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js')
+    const loader = new GLTFLoader()
+    mixer = new THREE.AnimationMixer(character.model)
+    await Promise.all(Object.keys(PACKS).map((k) => loadPack(k, loader).catch((err) => console.warn('[player] 动作包加载失败', k, err))))
     // Hips 的绑定姿势朝向（算舞蹈片段起点朝向用）
     character.model.traverse((o) => {
       if (o.isSkinnedMesh && !hipsBind) {
@@ -100,25 +142,25 @@ export function createPlayer({ character, camera, canvas, hud }) {
         if (i >= 0) hipsBind = new THREE.Quaternion().setFromRotationMatrix(o.skeleton.boneInverses[i].clone().invert())
       }
     })
-    mixer = new THREE.AnimationMixer(character.model)
     springs = createSpringBones(character.model)
     api.springs = springs
-    for (const clip of g.animations) {
-      const a = mixer.clipAction(clip)
-      const once = /^(jump|land|crouch_rise)$/.test(clip.name) || clip.name.startsWith('emote_')
-      if (once) {
-        a.setLoop(THREE.LoopOnce, 1)
-        a.clampWhenFinished = true
-      }
-      acts[clip.name] = a
-    }
     // 特色动作：emotes.glb（水做的两段 + 旧三渲二的挥手/比心）+ 从已加载的 v2c 舞蹈里截的四段
     const [eg, emeta] = await Promise.all([
-      new GLTFLoader().loadAsync('./data/emotes.glb'),
+      loader.loadAsync('./data/emotes.glb'),
       fetch('./data/emotes.json').then((r) => r.json()),
     ])
     const clips = Object.fromEntries(eg.animations.map((c) => [c.name, c]))
     for (const e of EMOTES) {
+      if (e.fresh) {
+        // 动作包里自带的（原地、朝前），直接用
+        if (!acts[e.name]) continue
+        e.yaw = 0
+        if (e.loop) acts[e.name].setLoop(THREE.LoopRepeat, e.loop)
+        else acts[e.name].setLoop(THREE.LoopOnce, 1)
+        acts[e.name].clampWhenFinished = true
+        emotes.push(e)
+        continue
+      }
       let clip = clips[e.name]
       if (e.dance && character.clip) {
         const off = 1 / 120 // 舞蹈 glb 第 1 帧在 1/120 秒
@@ -163,9 +205,41 @@ export function createPlayer({ character, camera, canvas, hud }) {
 
   const api = {
     active: false,
-    _debug: () => ({ flyW: flyW.v, flying, grounded, view, base, p: p.toArray().map((x) => +x.toFixed(1)) }),
+    _debug: () => ({ flyW: flyW.v, flying, grounded, view, base, jump: jump && `${jump.phase}:${jump.k}`, emote: emote?.name, p: p.toArray().map((x) => +x.toFixed(1)) }),
     get view() {
       return view
+    },
+    get style() {
+      return style
+    },
+    // 切换动作风格（下一帧起生效）
+    setStyle(name) {
+      if (!STYLES[name]) return
+      style = name
+      if (base) {
+        const slot = base.split('/').pop()
+        base = null
+        for (const a of Object.values(acts)) if (!emote || a !== acts[emote.name]) a.fadeOut(0.25)
+        if (LOCO.includes(slot)) fade(slot, 0.25)
+      }
+      hud?.(api.help())
+    },
+    // 导入的动作（motion-import.js）：放进「导入」风格的某个槽位，或者作为特色动作
+    addImported(slot, clip, info = {}) {
+      if (!mixer) return
+      const k = `import/${slot}`
+      if (acts[k]) {
+        acts[k].stop()
+        mixer.uncacheAction(acts[k].getClip())
+      }
+      addClip(k, clip, { speed: [0, info.speed || 0], ...info })
+      if (slot.startsWith('emote_')) {
+        const e = { name: k, label: info.label || slot.slice(6), fresh: true, yaw: 0 }
+        const i = emotes.findIndex((x) => x.name === k)
+        if (i >= 0) emotes[i] = e
+        else emotes.push(e)
+      } else STYLES.import.map[slot] = k
+      hud?.(api.help())
     },
     get flying() {
       return flying
@@ -213,7 +287,11 @@ export function createPlayer({ character, camera, canvas, hud }) {
     },
     help() {
       const v = { fp: '第一人称', back: '背后', front: '正面' }[view]
-      return `${v}${flying ? ' · 飞行中' : ''} ｜ WASD 移动 · 空格 跳 · Shift 蹲 · Ctrl/双击W 跑 · 双击空格 飞行 · V 视角 · 点画面锁定鼠标\n特色动作：${emotes.map((e, i) => `${i + 1} ${e.label}`).join('  ')}`
+      const keyOf = (i) => (i < 9 ? String(i + 1) : i === 9 ? '0' : null)
+      return `${v} · ${STYLES[style].label}${flying ? ' · 飞行中' : ''} ｜ WASD 移动 · 空格 跳 · Shift 蹲 · Ctrl/双击W 跑 · 双击空格 飞行 · V 视角 · 点画面锁定鼠标\n特色动作：${emotes
+        .map((e, i) => keyOf(i) && `${keyOf(i)} ${e.label}`)
+        .filter(Boolean)
+        .join('  ')}`
     },
     onMouse(dx, dy) {
       yaw -= dx * 0.0025
@@ -248,8 +326,9 @@ export function createPlayer({ character, camera, canvas, hud }) {
       else if (c === 'KeyV') {
         view = view === 'fp' ? 'back' : view === 'back' ? 'front' : 'fp'
         hud?.(api.help())
-      } else if (/^Digit[1-9]$/.test(c)) {
-        const e = emotes[+c.slice(5) - 1]
+      } else if (/^Digit[0-9]$/.test(c)) {
+        const d = +c.slice(5)
+        const e = emotes[d === 0 ? 9 : d - 1]
         if (e && grounded && !flying) {
           stopEmote()
           emote = { name: e.name, e, t: 0 }
@@ -313,7 +392,7 @@ export function createPlayer({ character, camera, canvas, hud }) {
       animate(dt, hs, crouchKey)
       mixer.update(dt)
       flyPose(hs)
-      if (jump && jump.phase !== 'land') {
+      if (jump && jump.phase !== 'land' && !base?.startsWith('hand/') && !jump.k?.startsWith('hand/')) {
         // 腾空高度交给物理，片段里 Hips 往上抬的部分去掉（只保留蓄力下蹲）
         const hips = character.model.getObjectByName('Hips')
         if (hips) hips.position.y = Math.min(hips.position.y, 0.905)
@@ -335,34 +414,28 @@ export function createPlayer({ character, camera, canvas, hud }) {
     },
   }
 
+  // 跳：起跳（一次）→ 空中（循环到落地）→ 落地（一次），每种风格都按这三段走
+  function playOnce(slot, timeScale = 1, fadeDur = 0.12) {
+    const k = key(slot)
+    const a = k && acts[k]
+    if (!a) return null
+    a.reset().setEffectiveWeight(1).fadeIn(fadeDur).play()
+    a.timeScale = timeScale
+    if (base && base !== k) acts[base].fadeOut(fadeDur)
+    if (jump?.k && jump.k !== k) acts[jump.k].fadeOut(fadeDur)
+    base = null
+    return k
+  }
   function startJump() {
     grounded = false
     vel.y = JUMP_V
     stopEmote()
-    jump = { phase: 'up' }
-    const a = acts.jump
-    a.reset().setEffectiveWeight(1).play()
-    a.time = JUMP_T.start
-    a.timeScale = 1.6
-    if (base) acts[base].fadeOut(0.12)
-    base = null
+    const k = key('jump_start')
+    jump = { phase: 'up', k: playOnce('jump_start', k?.startsWith('motifect/') ? 1.6 : k?.startsWith('ual/') ? 2.6 : 1.3) }
   }
   function land(vy) {
-    if (jump) {
-      jump.phase = 'land'
-      const a = acts.jump
-      a.paused = false
-      a.time = Math.max(a.time, JUMP_T.land)
-      a.timeScale = 1.4
-    } else if (vy < -4) {
-      // 从高处落下（飞行/坠落）：落地缓冲
-      const a = acts.land
-      a.reset().setEffectiveWeight(1).play()
-      a.time = 1.25
-      a.timeScale = 1.3
-      if (base) acts[base].fadeOut(0.1)
-      base = null
-      jump = { phase: 'land', clip: 'land' }
+    if (jump || vy < -4) {
+      jump = { phase: 'land', k: playOnce(jump ? 'jump_land' : 'fall_land', 1.3, 0.1) }
     }
   }
   function stopEmote() {
@@ -374,14 +447,19 @@ export function createPlayer({ character, camera, canvas, hud }) {
 
   function animate(dt, hs, crouch) {
     if (jump) {
-      const a = acts[jump.clip || 'jump']
-      if (jump.phase === 'up' && a.time >= JUMP_T.hold) {
-        jump.phase = 'air'
-        a.paused = true // 空中保持腾空姿势，直到落地
+      const a = jump.k && acts[jump.k]
+      const done = !a || a.time >= a.getClip().duration - 0.02 || !a.isRunning()
+      if (jump.phase === 'up' && done) {
+        // 空中保持（循环），直到落地
+        const k = key('jump_air')
+        if (k) {
+          acts[k].reset().setLoop(THREE.LoopRepeat, Infinity).setEffectiveWeight(1).fadeIn(0.1).play()
+          if (a && a !== acts[k]) a.fadeOut(0.1)
+        }
+        jump = { phase: 'air', k }
       }
-      const end = jump.clip ? 2.6 : JUMP_T.end
-      if (jump.phase === 'land' && (a.time >= end || hs > 0.6)) {
-        a.fadeOut(0.25)
+      if (jump.phase === 'land' && (done || hs > 0.6)) {
+        a?.fadeOut(0.25)
         jump = null
         base = null
       } else return
@@ -421,8 +499,10 @@ export function createPlayer({ character, camera, canvas, hud }) {
     fade(name, 0.25, rate(name, hs))
   }
   // 按片段原速度缩放播放速率，脚步不打滑
-  function rate(name, speed) {
-    const s = meta[name]?.speed
+  function rate(slot, speed) {
+    const k = key(slot)
+    const [pack, name] = (k || '/').split('/')
+    const s = metas[pack]?.[name]?.speed
     const clipSpeed = s ? Math.hypot(s[0], s[1]) : 1
     return THREE.MathUtils.clamp(speed / Math.max(0.2, clipSpeed), 0.5, 2.7)
   }

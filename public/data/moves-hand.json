@@ -1,0 +1,92 @@
+{
+ "idle": {
+  "src": "handmade (handmade_moves.py)",
+  "frames": 121,
+  "fps": 30,
+  "duration": 4.0,
+  "speed": [
+   0.0,
+   0.0
+  ]
+ },
+ "walk": {
+  "src": "handmade (handmade_moves.py)",
+  "frames": 31,
+  "fps": 30,
+  "duration": 1.0,
+  "speed": [
+   0.0,
+   1.0
+  ]
+ },
+ "run": {
+  "src": "handmade (handmade_moves.py)",
+  "frames": 21,
+  "fps": 30,
+  "duration": 0.6667,
+  "speed": [
+   0.0,
+   3.0
+  ]
+ },
+ "jump_start": {
+  "src": "handmade (handmade_moves.py)",
+  "frames": 7,
+  "fps": 30,
+  "duration": 0.2,
+  "speed": [
+   0.0,
+   0.0
+  ]
+ },
+ "jump_air": {
+  "src": "handmade (handmade_moves.py)",
+  "frames": 41,
+  "fps": 30,
+  "duration": 1.3333,
+  "speed": [
+   0.0,
+   0.0
+  ]
+ },
+ "jump_land": {
+  "src": "handmade (handmade_moves.py)",
+  "frames": 12,
+  "fps": 30,
+  "duration": 0.3667,
+  "speed": [
+   0.0,
+   0.0
+  ]
+ },
+ "crouch": {
+  "src": "handmade (handmade_moves.py)",
+  "frames": 91,
+  "fps": 30,
+  "duration": 3.0,
+  "speed": [
+   0.0,
+   0.0
+  ]
+ },
+ "crouch_fwd": {
+  "src": "handmade (handmade_moves.py)",
+  "frames": 37,
+  "fps": 30,
+  "duration": 1.2,
+  "speed": [
+   0.0,
+   0.7
+  ]
+ },
+ "emote_cheer": {
+  "src": "handmade (handmade_moves.py)",
+  "frames": 91,
+  "fps": 30,
+  "duration": 3.0,
+  "speed": [
+   0.0,
+   0.0
+  ]
+ }
+}

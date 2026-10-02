@@ -127,6 +127,14 @@ async function main() {
       $('playerHud').textContent = text
     },
   })
+  const styleSel = $('moveStyle')
+  styleSel.value = params.get('moves') || store.get('ds-player-style') || 'girl'
+  player.setStyle(styleSel.value)
+  styleSel.onchange = () => {
+    player.setStyle(styleSel.value)
+    store.set('ds-player-style', styleSel.value)
+    styleSel.blur()
+  }
   window.__player = player // 调试/自动化用
   window.__character = character
   $('fpBtn').onclick = async () => {

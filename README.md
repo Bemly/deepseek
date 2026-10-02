@@ -42,6 +42,9 @@ npm run dev   # 仓库自带 public/audio/let-me-go.mp3；也可以替换或在�
   点画面锁定鼠标转视角（Esc 释放）。数字键 1–8 特色动作：挥手、比心（之前三渲二版本的动作，重定向过来）、
   眨眼 / 写JSON / 副歌 / 举手（从 v2c 的 Let Me Go 舞蹈里截，带当时的表情）、水·副歌 / 水·举手（《我的悲伤是水做的》）。移动动作来自 Motifect Locomotion Motion Pack（免费，可用于项目，不得单独再分发原始文件），
   由 `tools/retarget_bvh.py` 重定向到 v2c 骨架后放在 `public/data/moves.glb`（原始 BVH/FBX 不进仓库）。
+  底栏「动作」下拉框切换动作风格（缺的动作用 Motifect 补）：少女MMD（默认）/ 手搓（本项目原创的二次元少女动作，
+  `tools/handmade_moves.py`：内八站姿、小碎步、企鹅手、手肘外张跑、举手跳）/ Quaternius（Universal Animation Library，CC0，
+  `tools/retarget_glb.py`）/ Motifect / 导入。特色动作新增 9 欢呼（手搓）、0 跳舞（Quaternius）。
   向前走 / 跑换成少女向的 MMD 动作（`tools/retarget_vmd.py` 重定向，`public/data/moves-vmd.glb`）：
   走 = Chibi walk（Various Walk Cycles by tweekcrystal, DeviantArt）的小碎步，跑 = 女の子走りモーション（@fuudo_food_0309）
 - URL 参数：`?model=blend|ref|hidden`、`?cam=blend|manual`、`?pipe=web|blend|blend-flat|simple`、`?outline=0` 关角色描边

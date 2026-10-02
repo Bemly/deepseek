@@ -1,0 +1,167 @@
+{
+ "idle": {
+  "src": "Idle_Loop",
+  "frames": 76,
+  "fps": 30,
+  "duration": 2.5,
+  "speed": [
+   0.0,
+   -0.0002
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ },
+ "idle2": {
+  "src": "Idle_Talking_Loop",
+  "frames": 89,
+  "fps": 30,
+  "duration": 2.9333,
+  "speed": [
+   -0.0013,
+   -0.0001
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ },
+ "walk": {
+  "src": "Walk_Loop",
+  "frames": 41,
+  "fps": 30,
+  "duration": 1.3333,
+  "speed": [
+   0.0,
+   1.2
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ },
+ "walk_formal": {
+  "src": "Walk_Formal_Loop",
+  "frames": 41,
+  "fps": 30,
+  "duration": 1.3333,
+  "speed": [
+   0.0,
+   1.2
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ },
+ "run": {
+  "src": "Jog_Fwd_Loop",
+  "frames": 29,
+  "fps": 30,
+  "duration": 0.9333,
+  "speed": [
+   0.0,
+   3.2
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ },
+ "sprint": {
+  "src": "Sprint_Loop",
+  "frames": 21,
+  "fps": 30,
+  "duration": 0.6667,
+  "speed": [
+   0.0,
+   5.5
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ },
+ "jump_start": {
+  "src": "Jump_Start",
+  "frames": 41,
+  "fps": 30,
+  "duration": 1.3333,
+  "speed": [
+   -0.0041,
+   -0.0119
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ },
+ "jump_air": {
+  "src": "Jump_Loop",
+  "frames": 76,
+  "fps": 30,
+  "duration": 2.5,
+  "speed": [
+   -0.0047,
+   -0.0006
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ },
+ "jump_land": {
+  "src": "Jump_Land",
+  "frames": 39,
+  "fps": 30,
+  "duration": 1.2667,
+  "speed": [
+   0.008,
+   0.0652
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ },
+ "crouch": {
+  "src": "Crouch_Idle_Loop",
+  "frames": 89,
+  "fps": 30,
+  "duration": 2.9333,
+  "speed": [
+   0.0,
+   0.0
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ },
+ "crouch_fwd": {
+  "src": "Crouch_Fwd_Loop",
+  "frames": 61,
+  "fps": 30,
+  "duration": 2.0,
+  "speed": [
+   0.0,
+   0.8
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ },
+ "dance": {
+  "src": "Dance_Loop",
+  "frames": 31,
+  "fps": 30,
+  "duration": 1.0,
+  "speed": [
+   0.0761,
+   0.005
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ },
+ "roll": {
+  "src": "Roll",
+  "frames": 45,
+  "fps": 30,
+  "duration": 1.4667,
+  "speed": [
+   0.0164,
+   -0.0138
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ },
+ "swim": {
+  "src": "Swim_Fwd_Loop",
+  "frames": 41,
+  "fps": 30,
+  "duration": 1.3333,
+  "speed": [
+   0.0,
+   3.0
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ },
+ "swim_idle": {
+  "src": "Swim_Idle_Loop",
+  "frames": 101,
+  "fps": 30,
+  "duration": 3.3333,
+  "speed": [
+   -0.0028,
+   -0.0002
+  ],
+  "credit": "Universal Animation Library by Quaternius (CC0)"
+ }
+}
