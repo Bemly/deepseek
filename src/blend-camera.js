@@ -4,12 +4,13 @@
 // 坐标换算（见 blender 侧 r_keys.py 的 T3）：web(x,y,z) → blend(x*0.08, -z*0.08, y*0.08)，
 // 所以 blend(bx,by,bz) → web(bx/0.08, bz/0.08, -by/0.08)，即米 → MMD 单位 ×12.5 并交换 Y/Z。
 // 正交段（77.2–80.2s 系统崩溃 / 101.7–103.1s 屏息）用真正的 OrthographicCamera，
-// oscale 按"可见宽度（blend 米）"理解：halfW = oscale*12.5/2（若实测 framing 不对，把 ORTHO_IS_WIDTH 置 false 即为高度）。
+// oscale 是"可见高度（blend 米）"：b_camera.py 把相机设成 sensor_fit = 'VERTICAL'，Blender 的 ortho_scale 就沿竖直方向，
+// 所以 halfH = oscale*12.5/2、halfW = halfH*aspect（实测特写头高和 v2c 一致；按宽度算会小一个 aspect 倍）。
 // clip（blend 的 clip_start，米）同样 ×12.5 作为 near——正交大 clip 会切掉前景是 blend 原意。
 
 export const BLEND_FPS = 120
 const S = 1 / 0.08 // 12.5
-const ORTHO_IS_WIDTH = true
+const ORTHO_IS_WIDTH = false
 
 export function blendToWeb([bx, by, bz]) {
   return [bx * S, bz * S, -by * S]
