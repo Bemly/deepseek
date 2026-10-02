@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { createWorld } from './world/index.js'
 import { createPostFX } from './postfx.js'
+import { loadBlendCamera, updateBlendCamera } from './blend-camera.js'
 import { SONG, SECTIONS, DEMO_THEME_SCHEDULE } from './lyrics.js'
 
 // 预览页：播放歌曲、拖进度、切机位看场景。MMD 模型不在这里加载——
@@ -50,10 +51,41 @@ async function main() {
 
   const scene = new THREE.Scene()
   const camera = new THREE.PerspectiveCamera(38, 1, 1, 80000)
+  const orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.5, 90000)
+  // 运镜：默认 blend 版（v2c 的 DS_Cam / DS_CamOrtho），手动才用机位按钮/漫游
+  const camSel = $('cam')
+  const camMode = () =>
+    params.get('cam') || store.get('ds-stage-cam') || camSel.value || 'blend'
+  let blendCam = null
+  let blendCamFailed = false
+  loadBlendCamera(params.get('cambase') || './data/camera-blend-v3.json')
+    .then((d) => (blendCam = d))
+    .catch((err) => {
+      blendCamFailed = true
+      console.warn('[cam] blend 运镜加载失败，回退手动：', err)
+    })
+  camSel.value = camMode()
   // 生成是同步的，先让"正在生成场景…"画出来
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)))
   const world = createWorld(renderer, { quality, initial: params.get('theme') || defaults.theme }).attach(scene)
   const post = createPostFX(renderer, scene, camera, { bloom: params.get('bloom') !== '0', world })
+
+  // 运镜模式切换：blend（默认，v2c 运镜）/ manual（机位按钮 + 漫游）
+  function setCamMode(m) {
+    camSel.value = m
+    store.set('ds-stage-cam', m)
+    if (m === 'manual') {
+      camera.near = 1
+      camera.updateProjectionMatrix()
+      post.setCamera(camera)
+    } else {
+      $('tour').checked = false
+    }
+  }
+  camSel.onchange = () => setCamMode(camSel.value)
+  $('tour').addEventListener('change', (e) => {
+    if (e.target.checked) setCamMode('manual')
+  })
 
   // 身高参考：20 单位高的全息人形（MMD 角色大约这么高），只在预览里出现
   const ref = new THREE.Group()
@@ -86,6 +118,7 @@ async function main() {
   function setView(key) {
     const v = typeof key === 'object' ? key : VIEWS[key]
     if (!v) return
+    setCamMode('manual', true)
     camera.position.set(...v.pos)
     controls.target.set(...v.target)
     camera.fov = v.fov
@@ -104,7 +137,8 @@ async function main() {
     }
     $('views').appendChild(b)
   })
-  setView(params.get('view') || 'front')
+  // blend 运镜默认接管相机时不预置手动视角
+  if (camSel.value === 'manual') setView(params.get('view') || 'front')
 
   // ---------- 时间轴 ----------
   const audio = new Audio()
@@ -195,6 +229,7 @@ async function main() {
   window.addEventListener('resize', resize)
   resize()
   world.compile(renderer, scene, camera)
+  world.compile(renderer, scene, orthoCam)
   $('loading')?.remove()
 
   // ---------- 主题 ----------
@@ -241,8 +276,16 @@ async function main() {
       if (clock >= SONG.duration) togglePlay(false)
     }
     if ($('tour').checked) tour(clock)
-    controls.update()
-    const s = world.update(clock, camera)
+    // blend 运镜（默认）：相机完全由歌曲时间决定（v2c DS_Cam / DS_CamOrtho），不碰场景
+    let activeCam = camera
+    if (blendCam && camSel.value === 'blend' && !$('tour').checked) {
+      activeCam = updateBlendCamera(blendCam, clock, camera, orthoCam, camera.aspect)
+      post.setCamera(activeCam)
+    } else {
+      if ($('tour').checked) post.setCamera(camera)
+      controls.update()
+    }
+    const s = world.update(clock, activeCam)
     post.render(s)
 
     seekEl.value = clock
@@ -264,13 +307,22 @@ async function main() {
     world,
     renderer,
     camera,
+    orthoCam,
     setView,
+    setCamMode,
     renderAt(t, view, theme) {
       if (view) setView(view)
       if (theme) world.setTheme(theme)
       clock = t
-      controls.update()
-      const s = world.update(t, camera)
+      let cam = camera
+      if (blendCam && camSel.value === 'blend' && !view) {
+        cam = updateBlendCamera(blendCam, t, camera, orthoCam, camera.aspect)
+        post.setCamera(cam)
+      } else {
+        controls.update()
+        post.setCamera(camera)
+      }
+      const s = world.update(t, cam)
       post.render(s)
       return s.section
     },
