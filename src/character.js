@@ -95,10 +95,11 @@ export function createCharacter(scene) {
       DEPTH_TEST.uViewport.value.set(w, h)
     },
     // 歌曲时间的纯函数：骨骼姿态 + 表情 + 跟随场景主题的角色色调（world.update 之后调用）
+    dancing: true, // false = 玩家模式接管（player.js），这里不再按歌曲时间摆姿势/表情
     update(t, world) {
-      api.pose(t)
+      if (api.dancing) api.pose(t)
       if (!api.material) return
-      api.face?.apply(api.material, t)
+      if (api.dancing) api.face?.apply(api.material, t)
       const m = world?.mix
       if (m) setLook(api.material, m.a, m.b, m.p)
       else setLook(api.material, world?.theme || 'harbor', world?.theme || 'harbor', 1)

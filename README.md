@@ -37,6 +37,10 @@ npm run dev   # 仓库自带 public/audio/let-me-go.mp3；也可以替换或在�
   - **运镜**：blend 版 = v2c 的 DS_Cam / DS_CamOrtho（含 104 秒后跟脸的 v3 运镜，`public/data/camera-blend-v3.json`）；「手动」才用右上角机位和漫游
   - **管线**：web 版（默认）= 仓库原来的后期链；blend 版 = v2c 的 `post_final.py`（角色单独一层盖在 ACES 之后的场景上）；
     blend 版·无阴影 = 同上，角色不做卡通明暗/边缘光、不投影（和 `work/bake_no_shadow.py` 的无阴影版一致）；「简洁」关掉泛光/故障/暗角
+- **第一人称**（底栏按钮）：角色脱离舞蹈由你控制，歌曲和场景时间轴照走。WASD 前后左右、空格跳、按住 Shift 蹲、Ctrl 或双击 W 跑；
+  双击空格进入/退出飞行（像 MC），飞行时按住空格上升、Shift 下降，带加速度和阻尼；V 切换第一人称 / 背后 / 正面视角；
+  点画面锁定鼠标转视角（Esc 释放）。移动动作来自 Motifect Locomotion Motion Pack（免费，可用于项目，不得单独再分发原始文件），
+  由 `tools/retarget_bvh.py` 重定向到 v2c 骨架后放在 `public/data/moves.glb`（原始 BVH/FBX 不进仓库）
 - URL 参数：`?model=blend|ref|hidden`、`?cam=blend|manual`、`?pipe=web|blend|blend-flat|simple`、`?outline=0` 关角色描边
 - 左上角切场景（手动切是 2.4 秒溶解过渡）；勾上「按段落切场景」则按 `DEMO_THEME_SCHEDULE` 跟着歌曲时间自动切
 - URL 参数：`?t=51.4` 从某秒开始，`?view=wide` 初始机位，`?theme=atlantis` 初始场景，`?q=low|high|ultra` 画质，`?ui=0` 隐藏界面，`?bloom=0` 关泛光
@@ -169,6 +173,7 @@ src/
   blend-camera.js v2c 运镜（blend 坐标 ×12.5 → web）
   character.js    v2c 角色：模型、舞蹈（AnimationMixer）、描边壳、holdout/角色层切换
   character-material.js  v2c TOON 材质 + 表情 + 主题色调
+  player.js       第一人称 / 第三人称玩家模式（移动、跳跃、蹲、飞行、视角）
   face-expression.js     表情合成着色器（tools/nodes2glsl.py 生成）
   world/
     index.js      场景总装 + 主题切换（共用天空/海面/灯光，每个主题一套 root）

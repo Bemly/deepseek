@@ -51,3 +51,20 @@ html, body { margin: 0; height: 100%; background: #04070f; color: var(--fg); ove
   background: radial-gradient(ellipse at center, #0b1630 0%, #03060d 70%);
   pointer-events: none;
 }
+
+.player-hud {
+  position: absolute;
+  left: 50%;
+  top: 64px;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: rgba(8, 14, 32, 0.62);
+  color: #dbe7ff;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+#fpBtn.on {
+  background: rgba(120, 170, 255, 0.35);
+}

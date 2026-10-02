@@ -4,6 +4,7 @@ import { createWorld } from './world/index.js'
 import { createPostFX } from './postfx.js'
 import { loadBlendCamera, updateBlendCamera } from './blend-camera.js'
 import { createCharacter } from './character.js'
+import { createPlayer } from './player.js'
 import { SONG, SECTIONS, DEMO_THEME_SCHEDULE } from './lyrics.js'
 
 // 预览页：播放歌曲、拖进度、切机位看场景。MMD 模型不在这里加载——
@@ -116,6 +117,35 @@ async function main() {
   // 模型：默认 blend 版（v2c 三渲二角色），只在预览里出现，不碰场景
   const character = createCharacter(scene)
   post.setCharacter(character)
+  // 玩家模式：第一人称按钮 → 角色脱离舞蹈，WASD/空格/Shift 控制（歌曲和场景时间轴照走）
+  const player = createPlayer({
+    character,
+    camera,
+    canvas,
+    hud: (text) => {
+      $('playerHud').hidden = !text
+      $('playerHud').textContent = text
+    },
+  })
+  window.__player = player // 调试/自动化用
+  $('fpBtn').onclick = async () => {
+    if (player.active) player.exit()
+    else {
+      modelSel.value = 'blend'
+      applyModelMode()
+      await player.enter()
+      canvas.requestPointerLock?.()
+    }
+    $('fpBtn').classList.toggle('on', player.active)
+    $('fpBtn').textContent = player.active ? '退出第一人称' : '第一人称'
+    $('fpBtn').blur()
+  }
+  canvas.addEventListener('click', () => {
+    if (player.active && document.pointerLockElement !== canvas) canvas.requestPointerLock?.()
+  })
+  document.addEventListener('mousemove', (e) => {
+    if (player.active && document.pointerLockElement === canvas) player.onMouse(e.movementX, e.movementY)
+  })
   const modelSel = $('model')
   modelSel.value =
     params.get('model') ||
@@ -234,6 +264,10 @@ async function main() {
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' && e.target.type !== 'range') return
     if (e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return
+    if (player.active && player.onKey(e, true)) {
+      e.preventDefault()
+      return
+    }
     if (FLY_KEYS.has(e.code)) {
       e.preventDefault()
       if (!e.repeat) {
@@ -252,6 +286,7 @@ async function main() {
     } else if (/^[1-7]$/.test(e.key)) setView(Object.keys(VIEWS)[+e.key - 1])
   })
   window.addEventListener('keyup', (e) => {
+    if (player.active) player.onKey(e, false)
     fly.delete(e.code)
     if (!fly.size) flyStart = 0
   })
@@ -361,7 +396,10 @@ async function main() {
       ref.visible = !character.ready
     }
     let activeCam = camera
-    if (blendCam && camSel.value === 'blend' && !$('tour').checked) {
+    if (player.active) {
+      player.update(dt)
+      post.setCamera(camera)
+    } else if (blendCam && camSel.value === 'blend' && !$('tour').checked) {
       activeCam = updateBlendCamera(blendCam, clock, camera, orthoCam, camera.aspect)
       post.setCamera(activeCam)
     } else {
@@ -396,6 +434,15 @@ async function main() {
     orthoCam,
     setView,
     setCamMode,
+    // 玩家模式下按当前状态渲染一帧（自动化截图用）
+    renderPlayer(dt = 0) {
+      if (!player.active) return
+      player.update(dt)
+      post.setCamera(camera)
+      const s = world.update(clock, camera)
+      character.update(clock, world)
+      post.render(s)
+    },
     renderAt(t, view, theme) {
       if (view) setView(view)
       if (theme) world.setTheme(theme)

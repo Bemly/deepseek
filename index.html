@@ -23,6 +23,7 @@
         <nav class="views" id="views"></nav>
       </header>
       <div class="lyric" id="lyric"></div>
+      <div id="playerHud" class="player-hud" hidden></div>
       <footer class="bar">
         <button id="play" class="play" title="播放 / 暂停（P）">▶</button>
         <span id="time" class="time">0:00.0</span>
@@ -38,6 +39,7 @@
         </select>
         <label class="tog"><input type="checkbox" id="tour" /> 漫游</label>
         <label class="tog" title="按歌曲段落自动切换场景"><input type="checkbox" id="auto" /> 按段落切场景</label>
+        <button id="fpBtn" class="tog" title="第一人称：角色脱离舞蹈由你控制（WASD/空格/Shift，双击空格飞行，V 切视角）">第一人称</button>
         <select id="cam" aria-label="运镜" title="运镜（默认 blend 版，与 v2c 同运镜）">
           <option value="blend" selected>运镜·blend版</option>
           <option value="manual">运镜·手动</option>
