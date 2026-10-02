@@ -308,8 +308,6 @@ async function main() {
       if (clock >= SONG.duration) togglePlay(false)
     }
     if ($('tour').checked) tour(clock)
-    // 角色只跟歌曲时间走（和 world.update 同哲学），不碰场景
-    character.update(clock)
     if (modelSel.value === 'blend') {
       character.group.visible = character.ready
       ref.visible = !character.ready
@@ -323,6 +321,8 @@ async function main() {
       controls.update()
     }
     const s = world.update(clock, activeCam)
+    // 角色只跟歌曲时间走（和 world.update 同哲学），不碰场景；在 world 之后更新以便跟随主题过渡
+    character.update(clock, world)
     post.render(s)
 
     seekEl.value = clock
@@ -351,7 +351,6 @@ async function main() {
       if (view) setView(view)
       if (theme) world.setTheme(theme)
       clock = t
-      character.update(t)
       let cam = camera
       if (blendCam && camSel.value === 'blend' && !view) {
         cam = updateBlendCamera(blendCam, t, camera, orthoCam, camera.aspect)
@@ -361,6 +360,7 @@ async function main() {
         post.setCamera(camera)
       }
       const s = world.update(t, cam)
+      character.update(t, world)
       post.render(s)
       return s.section
     },

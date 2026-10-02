@@ -1,0 +1,1 @@
+{"fps": 120, "first": 1, "frames": 15256, "channels": ["FACE_EyeR", "FACE_EyeL", "FACE_Mouth", "FACE_IrisR_dx", "FACE_IrisR_dy", "FACE_IrisL_dx", "FACE_IrisL_dy", "FACE_IrisScale"], "note": "v2c face drivers sampled every frame; frame f = song (f-1)/fps s"}

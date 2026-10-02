@@ -1,5 +1,6 @@
 // 角色模型：默认 blend 版（LetMeGo-dschan_v2c.blend 的 Character_FullDetail + Character_Rig + 舞蹈），只克隆模型，不碰场景。
-// - mesh+rig：./models/dschan-blend.glb（Draco，烘焙材质；见 public/models/README.md）
+// - mesh+rig：./models/dschan-blend.glb（Draco；带 UVMap/HandUV/FaceUV、cap_color、part_kind、face_layer）
+// - 材质：v2c TOON 材质的逐节点复刻 + 逐帧表情（src/character-material.js）
 // - 舞蹈：./data/dance-v2c.glb —— v2c 的动作由 Blender glTF 导出器直接导出（每 4 帧采一次 = 30fps），
 //   Z-up→Y-up 和骨骼轴向都由导出器换算，three 侧用 AnimationMixer 播放，不再手算 rest×offset。
 // - 摆放：blend 世界坐标原样搬过来（glTF 已是 Y-up 米制），只乘 12.5 换成 web 单位——
@@ -7,18 +8,20 @@
 // - update(t) 是歌曲时间的纯函数（mixer.setTime），任意跳时间/倒放/逐帧渲染都一致。
 
 import * as THREE from 'three'
+import { createCharacterMaterial, loadFaceTrack, setLook } from './character-material.js'
 
 export const BLEND_TO_WEB = 1 / 0.08 // 12.5，见 blend-camera.js
 export const BLEND_FPS = 120 // v2c 时间轴：第 f 帧 = 歌曲 (f-1)/120 秒
-export const OUTLINE_COLOR = 0x0a1026 // 描边壳颜色（深蓝黑墨线）
-export const OUTLINE_WIDTH = 0.12 // 描边宽度（web 单位；?outline= 可调，0 关闭）
+// v2c「TOON Outline」：Line Width 0.00125 m，墨线材质 Emission 线性 (0.012, 0.018, 0.04)
+export const OUTLINE_COLOR = [0.012, 0.018, 0.04] // 线性 RGB（深蓝黑墨线）
+export const OUTLINE_WIDTH = 0.00125 * (1 / 0.08) // 描边宽度（web 单位；?outline= 可调，0 关闭）
 
 // 背面膨胀壳描边（blend 侧 TOON Outline 修改器的 web 复刻）：
 // 把 mesh 克隆一份，翻到背面显示，顶点沿法线外扩。位移写在 begin_vertex 里，
 // 蒙皮在之后才作用，所以偏移会跟着骨骼一起转。宽度按模型本地坐标传入。
 export function addOutlineShell(mesh, widthLocal) {
   if (!mesh.geometry.getAttribute('normal') || !(widthLocal > 0)) return null
-  const mat = new THREE.MeshBasicMaterial({ color: OUTLINE_COLOR, side: THREE.BackSide })
+  const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(...OUTLINE_COLOR, THREE.LinearSRGBColorSpace), side: THREE.BackSide })
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uOutlineW = { value: widthLocal }
     sh.vertexShader = sh.vertexShader
@@ -61,18 +64,32 @@ export function createCharacter(scene) {
     ready: false, // mesh 就绪
     danceReady: false, // 动作就绪
     failed: false,
-    update(_t) {},
+    pose(_t) {},
+    // 歌曲时间的纯函数：骨骼姿态 + 表情 + 跟随场景主题的角色色调（world.update 之后调用）
+    update(t, world) {
+      api.pose(t)
+      if (!api.material) return
+      api.face?.apply(api.material, t)
+      const m = world?.mix
+      if (m) setLook(api.material, m.a, m.b, m.p)
+      else setLook(api.material, world?.theme || 'harbor', world?.theme || 'harbor', 1)
+    },
     async load(url, danceUrl, outlineWidth) {
       if (!(outlineWidth >= 0)) outlineWidth = OUTLINE_WIDTH // NaN/缺省 → 默认；0 = 关闭
       const loader = await gltfLoader()
-      const gltf = await loader.loadAsync(url)
+      const [gltf, mat, face] = await Promise.all([
+        loader.loadAsync(url),
+        createCharacterMaterial(),
+        loadFaceTrack().catch((err) => (console.warn('[model] 表情数据缺失，脸保持默认：', err), null)),
+      ])
       const model = gltf.scene
       model.scale.setScalar(BLEND_TO_WEB)
+      api.material = mat
+      api.face = face
       const outlineLocal = outlineWidth > 0 ? outlineWidth / BLEND_TO_WEB : 0
       model.traverse((o) => {
         if (o.isMesh) {
-          // 烘焙贴图已含最终颜色；COLOR_0/1 是 blend 的 cap_color / face_layer 等属性，不能再乘进颜色
-          if (o.material) o.material.vertexColors = false
+          o.material = mat // v2c TOON 材质的复刻（character-material.js）
           o.castShadow = true // 舞台主光投影（README 约定）
           o.receiveShadow = false
           if (o.isSkinnedMesh) o.frustumCulled = false // 跳舞时包围盒会跑掉，直接关掉裁剪
@@ -102,9 +119,7 @@ export function createCharacter(scene) {
       api.mixer = mixer
       api.clip = clip
       api.danceReady = true
-      api.update = (t) => {
-        mixer.setTime(Math.max(0, Math.min(clip.duration, t + t0)))
-      }
+      api.pose = (t) => mixer.setTime(Math.max(0, Math.min(clip.duration, t + t0)))
     },
   }
   return api
