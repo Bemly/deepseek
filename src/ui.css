@@ -142,3 +142,5 @@ html, body { margin: 0; height: 100%; background: #04070f; color: var(--fg); ove
 @media (max-width: 640px) { .settings { right: 8px; bottom: 62px; } }
 
 .settings [hidden] { display: none !important; }
+/* hidden 属性必须压过上面的 display: grid / flex */
+.settings[hidden], .import-panel[hidden], .player-hud[hidden] { display: none !important; }

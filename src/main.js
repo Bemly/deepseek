@@ -40,12 +40,26 @@ async function loadFonts() {
 }
 
 async function main() {
+  // 设置面板（底栏只留时间轴）：最先绑定，场景生成/模型加载期间也能开关
+  const settings = $('settings')
+  const settingsBtn = $('settingsBtn')
+  const showSettings = (on) => {
+    settings.hidden = !on
+    settingsBtn.setAttribute('aria-expanded', String(on))
+  }
+  settingsBtn.onclick = () => showSettings(settings.hidden)
+  window.addEventListener('pointerdown', (e) => {
+    if (!settings.hidden && !settings.contains(e.target) && e.target !== settingsBtn) showSettings(false)
+  })
   await loadFonts()
   const coarse = window.matchMedia?.('(pointer: coarse)').matches
   const quality = params.get('q') || store.get('ds-stage-q') || (coarse ? 'low' : 'high')
   $('quality').value = quality
   const canvas = $('c')
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: params.has('capture') })
+  // Firefox 会把每个着色器程序的驱动提示（未用到的 varying / attribute 被优化掉等）当 info log 返回，
+  // three 逐条打印成一大串 WARNING；这些不是错误。默认关掉检查（顺带省掉编译时的同步查询），?debug 时打开。
+  renderer.debug.checkShaderErrors = params.has('debug')
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFShadowMap
@@ -149,17 +163,8 @@ async function main() {
   window.__importer = importer
   window.__player = player // 调试/自动化用
   window.__character = character
-  // 设置面板（底栏只留时间轴）
-  const settings = $('settings')
-  const settingsBtn = $('settingsBtn')
-  const showSettings = (on) => {
-    settings.hidden = !on
-    settingsBtn.setAttribute('aria-expanded', String(on))
-  }
-  settingsBtn.onclick = () => showSettings(settings.hidden)
-  window.addEventListener('pointerdown', (e) => {
-    if (!settings.hidden && !settings.contains(e.target) && e.target !== settingsBtn) showSettings(false)
-  })
+  // 导入面板和设置面板叠在同一位置：打开导入时收起设置
+  $('importBtn').addEventListener('click', () => showSettings(false))
   // 角色控制：跟随舞蹈（v2c 动作）/ 自由控制（玩家模式，歌曲和场景时间轴照走）
   const ctrlSel = $('ctrlMode')
   ctrlSel.onchange = async () => {
