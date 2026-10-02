@@ -1,6 +1,3 @@
 node_modules/
 dist/
 .DS_Store
-# 歌曲版权归原作者，默认不进仓库（本地放 public/audio/let-me-go.mp3 即可）
-public/audio/*
-!public/audio/.gitkeep

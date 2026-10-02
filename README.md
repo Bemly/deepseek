@@ -27,8 +27,7 @@
 
 ```bash
 npm install
-cp 你的/Let_Me_Go.mp3 public/audio/let-me-go.mp3   # 歌曲不进仓库；没有也能跑，页面上可以手动选 mp3
-npm run dev
+npm run dev   # 仓库自带 public/audio/let-me-go.mp3；也可以替换或在页面上手动选 mp3
 ```
 
 - 空格播放/暂停，←/→ 快进快退 5 秒，1–7 切机位，H 隐藏界面
@@ -182,5 +181,5 @@ src/
 
 ## 素材说明
 
-- 歌曲：《Let Me Go》，[B 站 BV1mThC6LEbA](https://www.bilibili.com/video/BV1mThC6LEbA)（小猪P_），原曲 BV1XbY66nEWr（罐装毕加索）、BV13SYr6dEiQ（星落落_oi）。音频不包含在仓库里。
+- 歌曲：《Let Me Go》，[B 站 BV1mThC6LEbA](https://www.bilibili.com/video/BV1mThC6LEbA)（小猪P_），原曲 BV1XbY66nEWr（罐装毕加索）、BV13SYr6dEiQ（星落落_oi）。默认音频见 `public/audio/let-me-go.mp3`。
 - 角色人设参考：蓝色大肥鱼 / DeepSeek 娘社区二创形象（蓝色渐变长发、鲸类头鳍、鲸尾、深蓝白女仆装、主食白饭）。
