@@ -130,7 +130,7 @@ async function main() {
   character
     .load(
       params.get('modelbase') || './models/dschan-blend.glb',
-      params.get('dancebase') || './data/dance-30fps',
+      params.get('dance') || './data/dance-v2c.glb',
       parseFloat(params.get('outline') ?? 'NaN'),
     )
     .then(applyModelMode)

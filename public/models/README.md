@@ -2,18 +2,17 @@
 
 播放器「模型·blend版」（默认）加载：
 
-- `./models/dschan-blend.glb` — v2c 的 `Character_FullDetail` + `Character_Rig`
-  （unlit 烘焙材质 + Draco；描边 modifier 导出时摘除，web 里用背面膨胀壳复刻，见 `src/character.js` 的 `addOutlineShell`，`?outline=` 可调宽度，0 关闭）
-- `./data/dance-30fps.{json,bin}` — `BadBadWater_VMD` 按 30fps 采样
-  （174 骨骼四元数 + Hips 位移 + 15 脸部 props；脸部暂存不用）
+- `./models/dschan-blend.glb` — v2c 的 `Character_FullDetail` + `Character_Rig`（Draco，烘焙颜色贴图在 baseColor，KHR_materials_unlit）。
+  描边 modifier 导出时摘除，web 里用背面膨胀壳复刻（`src/character.js` 的 `addOutlineShell`，`?outline=` 调宽度，0 关闭）。
+- `./data/dance-v2c.glb` — v2c 的舞蹈动作（Character_Rig 的 active action），Blender glTF 导出器直接导出，
+  每 4 帧采一次（= 120fps 时间轴上的 30fps），第 f 帧 = 歌曲 (f-1)/120 秒。three 侧 `AnimationMixer.setTime` 播放。
 
-来源（本机可复现）：
+摆放：两份 glb 都是 blend 世界坐标（glTF Y-up、米），播放器只乘 12.5 换成 web 单位，和 blend 运镜同一套换算。
+
+重新导出舞蹈（约 35 秒）：
 
 ```bash
-# mesh+rig（Draco）
-blender -b <rigged.blend> --python /tmp/export_bind.py -- public/models/dschan-blend.glb
-# 舞蹈（30fps，纯 fcurve 求值）
-blender -b <v2c.blend> --python /tmp/sample_dance.py -- public/data/dance-30fps.bin public/data/dance-30fps.json
+blender -b LetMeGo-dschan_v2c.blend --python tools/export_dance_glb.py -- public/data/dance-v2c.glb
 ```
 
 文件缺失时播放器自动回退到身高参考占位，不报错挡路。
