@@ -184,7 +184,8 @@ export function createPostFX(renderer, scene, camera, { bloom = true, world = nu
   const composer = new EffectComposer(renderer, rt)
   const renderPass = world ? new ThemeRenderPass(scene, camera, world) : new RenderPass(scene, camera)
   composer.addPass(renderPass)
-  composer.addPass(new ShaderPass(ClampShader))
+  const clamp = new ShaderPass(ClampShader)
+  composer.addPass(clamp)
   const bloomPass = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.5, 0.4, 1.0)
   bloomPass.enabled = bloom
   composer.addPass(bloomPass)
@@ -192,9 +193,23 @@ export function createPostFX(renderer, scene, camera, { bloom = true, world = nu
   composer.addPass(grade)
   composer.addPass(new OutputPass())
 
+  // 渲染管线：blend（默认）= v2c 合成复刻（钳制→泛光→ACES→调色/故障/闪白，参数与 post_final.py 同式）；
+  // simple = 关泛光/故障/闪白/暗角的干净版，只做对比，不碰场景。
+  let pipeline = 'blend'
+  function setPipeline(name) {
+    pipeline = name === 'simple' ? 'simple' : 'blend'
+    const simple = pipeline === 'simple'
+    bloomPass.enabled = simple ? false : bloom
+    clamp.uniforms.uMax.value = simple ? 1e5 : 5.0
+  }
+
   return {
     composer,
     bloomPass,
+    setPipeline,
+    get pipeline() {
+      return pipeline
+    },
     setCamera(cam) {
       renderPass.camera = cam
     },
@@ -205,13 +220,15 @@ export function createPostFX(renderer, scene, camera, { bloom = true, world = nu
     },
     render(state) {
       if (state) {
+        const simple = pipeline === 'simple'
         let themeExp = 1
         if (world) themeExp = world.mix ? THREE.MathUtils.lerp(world.exposureOf(world.mix.a), world.exposureOf(world.mix.b), world.mix.p) : world.exposureOf(world.applied)
-        renderer.toneMappingExposure = 0.95 * state.exposure * themeExp
+        renderer.toneMappingExposure = (simple ? 1 : 0.95) * state.exposure * themeExp
         grade.uniforms.uTime.value = state.t
-        grade.uniforms.uGlitch.value = state.glitch
-        grade.uniforms.uFlash.value = state.recoverFlash * 0.25 + state.finaleFlash * 0.12
-        bloomPass.strength = 0.5 + 0.15 * state.pulse + 0.3 * state.finaleFlash
+        grade.uniforms.uGlitch.value = simple ? 0 : state.glitch
+        grade.uniforms.uFlash.value = simple ? 0 : state.recoverFlash * 0.25 + state.finaleFlash * 0.12
+        grade.uniforms.uVignette.value = simple ? 0 : 1
+        if (bloomPass.enabled) bloomPass.strength = 0.5 + 0.15 * state.pulse + 0.3 * state.finaleFlash
       }
       composer.render()
     },

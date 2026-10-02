@@ -83,6 +83,14 @@ async function main() {
     }
   }
   camSel.onchange = () => setCamMode(camSel.value)
+  // 渲染管线：默认 blend 版（v2c 合成），simple 只做对比
+  const pipeSel = $('pipe')
+  pipeSel.value = params.get('pipe') || store.get('ds-stage-pipe') || 'blend'
+  post.setPipeline(pipeSel.value)
+  pipeSel.onchange = () => {
+    post.setPipeline(pipeSel.value)
+    store.set('ds-stage-pipe', pipeSel.value)
+  }
   $('tour').addEventListener('change', (e) => {
     if (e.target.checked) setCamMode('manual')
   })
