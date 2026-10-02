@@ -250,15 +250,25 @@ async function main() {
       if (th) themeButtons[+e.code.slice(5) - 1].click()
     } else if (/^[1-7]$/.test(e.key)) setView(Object.keys(VIEWS)[+e.key - 1])
   })
-  window.addEventListener('keyup', (e) => fly.delete(e.code))
-  window.addEventListener('blur', () => fly.clear())
+  window.addEventListener('keyup', (e) => {
+    fly.delete(e.code)
+    if (!fly.size) flyStart = 0
+  })
+  window.addEventListener('blur', () => {
+    fly.clear()
+    flyStart = 0
+  })
 
   const _fwd = new THREE.Vector3()
   const _right = new THREE.Vector3()
   const _up = new THREE.Vector3(0, 1, 0)
-  const FLY_SPEED = 60 // MMD 单位/秒
+  const FLY_SPEED = 60 // MMD 单位/秒（起步速度，按住每 2 秒翻倍，上限 32 倍）
+  const FLY_MAX_BOOST = 32
+  let flyStart = 0
   function flyStep(dt) {
     if (!fly.size) return
+    if (!flyStart) flyStart = performance.now()
+    const boost = Math.min(FLY_MAX_BOOST, Math.pow(2, (performance.now() - flyStart) / 2000))
     camera.getWorldDirection(_fwd)
     _fwd.y = 0
     if (_fwd.lengthSq() < 1e-6) _fwd.set(0, 0, -1)
@@ -268,7 +278,7 @@ async function main() {
     const mz = (fly.has('KeyW') ? 1 : 0) - (fly.has('KeyS') ? 1 : 0)
     const my = (fly.has('Space') ? 1 : 0) - (fly.has('ShiftLeft') || fly.has('ShiftRight') ? 1 : 0)
     if (!mx && !mz && !my) return
-    const sp = FLY_SPEED * dt
+    const sp = FLY_SPEED * boost * dt
     camera.position.addScaledVector(_fwd, mz * sp)
     camera.position.addScaledVector(_right, mx * sp)
     camera.position.y += my * sp
