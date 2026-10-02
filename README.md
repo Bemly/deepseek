@@ -174,7 +174,8 @@ src/
   blend-camera.js v2c 运镜（blend 坐标 ×12.5 → web）
   character.js    v2c 角色：模型、舞蹈（AnimationMixer）、描边壳、holdout/角色层切换
   character-material.js  v2c TOON 材质 + 表情 + 主题色调
-  player.js       第一人称 / 第三人称玩家模式（移动、跳跃、蹲、飞行、视角）
+  player.js       第一人称 / 第三人称玩家模式（移动、跳跃、蹲、飞行、视角、特色动作）
+  springbones.js  玩家模式下头发 / 裙摆 / 尾巴 / 耳朵 / 呆毛的弹簧骨随动
   face-expression.js     表情合成着色器（tools/nodes2glsl.py 生成）
   world/
     index.js      场景总装 + 主题切换（共用天空/海面/灯光，每个主题一套 root）

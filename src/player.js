@@ -2,8 +2,10 @@
 //   WASD 前后左右 · 空格 跳 · 按住 Shift 蹲 · Ctrl 或双击 W 跑
 //   双击空格 进入/退出飞行（像 MC）：飞行时按住空格上升、Shift 下降，有加速度和阻尼
 //   V 切换 第一人称 / 背后第三人称 / 正面第三人称 · 1–8 特色动作 · 鼠标看（点画面锁定指针，Esc 释放）
+// 头发/裙摆/尾巴/耳朵用弹簧骨随动（springbones.js）。
 // 动作：public/data/moves.glb（tools/retarget_bvh.py 把 BVH 重定向到 v2c 骨架，原地播放），速度见 moves.json。
 import * as THREE from 'three'
+import { createSpringBones } from './springbones.js'
 
 const M = 12.5 // 1 米 = 12.5 web 单位（blend → web）
 const G = 20 // 重力 m/s²
@@ -54,6 +56,7 @@ export function createPlayer({ character, camera, canvas, hud }) {
   let idleAlt = 0
   let emotes = []
   let hipsBind = null
+  let springs = null
 
   function fade(name, dur = 0.22, timeScale = 1) {
     const a = acts[name]
@@ -82,6 +85,8 @@ export function createPlayer({ character, camera, canvas, hud }) {
       }
     })
     mixer = new THREE.AnimationMixer(character.model)
+    springs = createSpringBones(character.model)
+    api.springs = springs
     for (const clip of g.animations) {
       const a = mixer.clipAction(clip)
       const once = /^(jump|land|crouch_rise)$/.test(clip.name) || clip.name.startsWith('emote_')
@@ -171,6 +176,7 @@ export function createPlayer({ character, camera, canvas, hud }) {
       jump = emote = null
       base = null
       mixer.stopAllAction()
+      springs.reset()
       fade('idle', 0)
       character.dancing = false
       character.model.position.copy(p)
@@ -300,6 +306,11 @@ export function createPlayer({ character, camera, canvas, hud }) {
       if (emote) emote.t += dt
       character.model.position.copy(p)
       character.model.rotation.set(0, charYaw - (emote?.e.yaw || 0), 0)
+      // 头发/裙摆/尾巴随动；舞蹈里截的特色动作自带烘焙物理，渐变关掉
+      const baked = emote && (emote.e.dance || emote.e.name.startsWith('emote_bbw'))
+      springs.weight = approach(springs.weight, baked ? 0 : 1, dt * 3)
+      character.model.updateMatrixWorld(true)
+      springs.update(dt)
       placeCamera()
       if (api._lastHelp !== flying) {
         api._lastHelp = flying
