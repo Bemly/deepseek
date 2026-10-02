@@ -30,8 +30,12 @@
           <div class="marks" id="marks"></div>
           <input id="seek" type="range" min="0" max="127.15" step="0.01" value="0" aria-label="歌曲进度" />
         </div>
-        <label class="tog"><input type="checkbox" id="ref" checked /> 身高参考</label>
         <label class="tog"><input type="checkbox" id="showLyric" checked /> 歌词</label>
+        <select id="model" aria-label="角色模型" title="角色模型（默认 blend 版，v2c 三渲二角色）">
+          <option value="blend" selected>模型·blend版</option>
+          <option value="ref">身高参考</option>
+          <option value="hidden">隐藏</option>
+        </select>
         <label class="tog"><input type="checkbox" id="tour" /> 漫游</label>
         <label class="tog" title="按歌曲段落自动切换场景"><input type="checkbox" id="auto" /> 按段落切场景</label>
         <select id="cam" aria-label="运镜" title="运镜（默认 blend 版，与 v2c 同运镜）">

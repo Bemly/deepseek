@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { createWorld } from './world/index.js'
 import { createPostFX } from './postfx.js'
 import { loadBlendCamera, updateBlendCamera } from './blend-camera.js'
+import { createCharacter } from './character.js'
 import { SONG, SECTIONS, DEMO_THEME_SCHEDULE } from './lyrics.js'
 
 // 预览页：播放歌曲、拖进度、切机位看场景。MMD 模型不在这里加载——
@@ -111,11 +112,30 @@ async function main() {
     ref.add(body, head, skirt, ring)
   }
   scene.add(ref)
-  $('ref').onchange = (e) => (ref.visible = e.target.checked)
-  if (params.get('ref') === '0') {
-    ref.visible = false
-    $('ref').checked = false
+  // 模型：默认 blend 版（v2c 三渲二角色），只在预览里出现，不碰场景
+  const character = createCharacter(scene)
+  const modelSel = $('model')
+  modelSel.value =
+    params.get('model') ||
+    (params.get('ref') === '0' ? 'hidden' : store.get('ds-stage-model') || 'blend')
+  function applyModelMode() {
+    const m = modelSel.value
+    store.set('ds-stage-model', m)
+    const wantChar = m === 'blend'
+    character.group.visible = wantChar && character.ready
+    // blend 文件缺失时（ fresh clone）用身高参考占位并提示
+    ref.visible = m === 'ref' || (wantChar && (character.failed || !character.ready))
   }
+  modelSel.onchange = applyModelMode
+  character
+    .load(params.get('modelbase') || './models/dschan-blend.glb')
+    .then(applyModelMode)
+    .catch((err) => {
+      character.failed = true
+      console.warn('[model] blend 模型加载失败（public/models/dschan-blend.glb 缺失？），用身高参考占位：', err)
+      applyModelMode()
+    })
+  applyModelMode()
 
   const controls = new OrbitControls(camera, canvas)
   controls.enableDamping = true
@@ -284,7 +304,12 @@ async function main() {
       if (clock >= SONG.duration) togglePlay(false)
     }
     if ($('tour').checked) tour(clock)
-    // blend 运镜（默认）：相机完全由歌曲时间决定（v2c DS_Cam / DS_CamOrtho），不碰场景
+    // 角色只跟歌曲时间走（和 world.update 同哲学），不碰场景
+    character.update(clock)
+    if (modelSel.value === 'blend') {
+      character.group.visible = character.ready
+      ref.visible = !character.ready
+    }
     let activeCam = camera
     if (blendCam && camSel.value === 'blend' && !$('tour').checked) {
       activeCam = updateBlendCamera(blendCam, clock, camera, orthoCam, camera.aspect)
@@ -322,6 +347,7 @@ async function main() {
       if (view) setView(view)
       if (theme) world.setTheme(theme)
       clock = t
+      character.update(t)
       let cam = camera
       if (blendCam && camSel.value === 'blend' && !view) {
         cam = updateBlendCamera(blendCam, t, camera, orthoCam, camera.aspect)
