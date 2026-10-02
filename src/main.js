@@ -5,6 +5,7 @@ import { createPostFX } from './postfx.js'
 import { loadBlendCamera, updateBlendCamera } from './blend-camera.js'
 import { createCharacter } from './character.js'
 import { createPlayer } from './player.js'
+import { createMotionImport } from './motion-import.js'
 import { SONG, SECTIONS, DEMO_THEME_SCHEDULE } from './lyrics.js'
 
 // 预览页：播放歌曲、拖进度、切机位看场景。MMD 模型不在这里加载——
@@ -131,10 +132,20 @@ async function main() {
   styleSel.value = params.get('moves') || store.get('ds-player-style') || 'girl'
   player.setStyle(styleSel.value)
   styleSel.onchange = () => {
+    if (styleSel.value === 'import') restoreImports()
     player.setStyle(styleSel.value)
     store.set('ds-player-style', styleSel.value)
     styleSel.blur()
   }
+  // 自行导入动作（禁止再分发的动作用这个：文件只存在本机浏览器）
+  const importer = createMotionImport({ player, character, button: $('importBtn'), panel: $('importPanel') })
+  let restored = false
+  const restoreImports = async () => {
+    if (restored || !character.ready) return
+    restored = true
+    await importer.restore()
+  }
+  window.__importer = importer
   window.__player = player // 调试/自动化用
   window.__character = character
   $('fpBtn').onclick = async () => {
@@ -143,6 +154,7 @@ async function main() {
       modelSel.value = 'blend'
       applyModelMode()
       await player.enter()
+      restoreImports()
       canvas.requestPointerLock?.()
     }
     $('fpBtn').classList.toggle('on', player.active)

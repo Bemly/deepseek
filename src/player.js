@@ -209,6 +209,7 @@ export function createPlayer({ character, camera, canvas, hud }) {
     get view() {
       return view
     },
+    ensureLoaded: () => load(),
     get style() {
       return style
     },

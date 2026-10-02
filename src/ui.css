@@ -69,3 +69,45 @@ html, body { margin: 0; height: 100%; background: #04070f; color: var(--fg); ove
 #fpBtn.on {
   background: rgba(120, 170, 255, 0.35);
 }
+
+.import-panel {
+  position: absolute;
+  right: 16px;
+  bottom: 104px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: 46vh;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(8, 14, 32, 0.86);
+  color: #dbe7ff;
+  font-size: 12px;
+  display: grid;
+  gap: 6px;
+}
+.import-panel .imp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  opacity: 0.85;
+}
+.import-panel .imp-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+}
+.import-panel .imp-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.import-panel button,
+.import-panel select {
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 2px 8px;
+}

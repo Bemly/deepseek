@@ -24,6 +24,7 @@
       </header>
       <div class="lyric" id="lyric"></div>
       <div id="playerHud" class="player-hud" hidden></div>
+      <div id="importPanel" class="import-panel" hidden></div>
       <footer class="bar">
         <button id="play" class="play" title="播放 / 暂停（P）">▶</button>
         <span id="time" class="time">0:00.0</span>
@@ -46,6 +47,7 @@
           <option value="motifect">动作·Motifect</option>
           <option value="import">动作·导入</option>
         </select>
+        <button id="importBtn" class="tog" title="自行导入动作：.vmd .vrma .bvh .fbx .glb（只存在本机浏览器，不上传）">导入动作</button>
         <button id="fpBtn" class="tog" title="第一人称：角色脱离舞蹈由你控制（WASD/空格/Shift，双击空格飞行，V 切视角）">第一人称</button>
         <select id="cam" aria-label="运镜" title="运镜（默认 blend 版，与 v2c 同运镜）">
           <option value="blend" selected>运镜·blend版</option>
