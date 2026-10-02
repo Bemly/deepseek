@@ -45,6 +45,10 @@ npm run dev   # 仓库自带 public/audio/let-me-go.mp3；也可以替换或在�
   底栏「动作」下拉框切换动作风格（缺的动作用 Motifect 补）：少女MMD（默认）/ 手搓（本项目原创的二次元少女动作，
   `tools/handmade_moves.py`：内八站姿、小碎步、企鹅手、手肘外张跑、举手跳）/ Quaternius（Universal Animation Library，CC0，
   `tools/retarget_glb.py`）/ Motifect / 导入。特色动作新增 9 欢呼（手搓）、0 跳舞（Quaternius）。
+  「导入动作」：自己选 .vmd / .vrma / .bvh / .fbx / .glb，在浏览器里重定向到角色（`src/motion-import.js`：VMD 用移植自
+  `tools/vmd_solver.py` 的 MMD 解算，和 Blender 版逐骨骼误差 < 2 mm；其他格式按 VRMA humanoid 映射或骨骼层级自动识别），
+  每个文件可选放进哪个槽位（待机/走/跑/……/特色动作），选「动作·导入」风格即用。文件只存在本机浏览器（IndexedDB），
+  不上传、不进仓库——给禁止再分发的动作用（例如 ゆきはね式モーションパック、VRoid 官方 VRMA 7 种）。
   向前走 / 跑换成少女向的 MMD 动作（`tools/retarget_vmd.py` 重定向，`public/data/moves-vmd.glb`）：
   走 = Chibi walk（Various Walk Cycles by tweekcrystal, DeviantArt）的小碎步，跑 = 女の子走りモーション（@fuudo_food_0309）
 - URL 参数：`?model=blend|ref|hidden`、`?cam=blend|manual`、`?pipe=web|blend|blend-flat|simple`、`?outline=0` 关角色描边
@@ -181,6 +185,7 @@ src/
   character-material.js  v2c TOON 材质 + 表情 + 主题色调
   player.js       第一人称 / 第三人称玩家模式（移动、跳跃、蹲、飞行、视角、特色动作）
   springbones.js  玩家模式下头发 / 裙摆 / 尾巴 / 耳朵 / 呆毛的弹簧骨随动
+  motion-import.js 自行导入动作（VMD / VRMA / BVH / FBX / GLB → 浏览器内重定向，存本机 IndexedDB）
   face-expression.js     表情合成着色器（tools/nodes2glsl.py 生成）
   world/
     index.js      场景总装 + 主题切换（共用天空/海面/灯光，每个主题一套 root）
