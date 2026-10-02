@@ -1,9 +1,9 @@
-# models/ + 舞蹈数据（二进制放本地，不进仓库）
+# models/ + 舞蹈数据（跟着仓库走，开箱即用）
 
 播放器「模型·blend版」（默认）加载：
 
 - `./models/dschan-blend.glb` — v2c 的 `Character_FullDetail` + `Character_Rig`
-  （unlit 烘焙材质 + Draco，描边 modifier 已摘除，介意描边以后再加壳）
+  （unlit 烘焙材质 + Draco；描边 modifier 导出时摘除，web 里用背面膨胀壳复刻，见 `src/character.js` 的 `addOutlineShell`，`?outline=` 可调宽度，0 关闭）
 - `./data/dance-30fps.{json,bin}` — `BadBadWater_VMD` 按 30fps 采样
   （174 骨骼四元数 + Hips 位移 + 15 脸部 props；脸部暂存不用）
 
@@ -16,5 +16,4 @@ blender -b <rigged.blend> --python /tmp/export_bind.py -- public/models/dschan-b
 blender -b <v2c.blend> --python /tmp/sample_dance.py -- public/data/dance-30fps.bin public/data/dance-30fps.json
 ```
 
-`*.glb` 与 `dance-30fps.bin` 已在 `.gitignore`；`dance-30fps.json`（2.8K 头信息）进仓库。
 文件缺失时播放器自动回退到身高参考占位，不报错挡路。

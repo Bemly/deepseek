@@ -9,10 +9,38 @@ import * as THREE from 'three'
 export const MODEL_HEIGHT = 20 // 对齐身高参考
 export const MODEL_YAW = 0 // 若朝向不对（如背对 +Z），改这里（弧度）
 export const DANCE_FPS = 30
+export const OUTLINE_COLOR = 0x0a1026 // 描边壳颜色（深蓝黑墨线）
+export const OUTLINE_WIDTH = 0.12 // 描边宽度（web 单位，角色尺度下；?outline= 可调，0 关闭）
 
 const _qa = new THREE.Quaternion()
 const _qb = new THREE.Quaternion()
 const _v = new THREE.Vector3()
+
+// 背面膨胀壳描边（blend 侧 TOON Outline 修改器的 web 复刻）：
+// 把 mesh 克隆一份，翻到背面显示，顶点沿法线外扩 width。位移写在 begin_vertex 里，
+// 蒙皮在之后才作用，所以偏移会跟着骨骼一起转—— Mellowing 这对 SkinnedMesh 同样成立。
+// 宽度是角色尺度下的 web 单位，调用方按 model.scale 换算到本地坐标后传入。
+export function addOutlineShell(mesh, widthLocal) {
+  if (!mesh.geometry.getAttribute('normal') || !(widthLocal > 0)) return null
+  const mat = new THREE.MeshBasicMaterial({ color: OUTLINE_COLOR, side: THREE.BackSide })
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uOutlineW = { value: widthLocal }
+    sh.vertexShader = sh.vertexShader.replace(
+      '#include <begin_vertex>',
+      '#include <begin_vertex>\ntransformed += normalize(objectNormal) * uOutlineW;',
+    )
+  }
+  mat.customProgramCacheKey = () => 'ds-outline'
+  const shell = mesh.clone() // SkinnedMesh.clone 会共享 skeleton + bind 矩阵，正好
+  shell.material = mat
+  shell.name = `${mesh.name}__outline`
+  shell.castShadow = false
+  shell.receiveShadow = false
+  shell.frustumCulled = false
+  shell.renderOrder = -1
+  mesh.parent?.add(shell)
+  return shell
+}
 
 export function createCharacter(scene) {
   const group = new THREE.Group()
@@ -27,7 +55,8 @@ export function createCharacter(scene) {
     failed: false,
     face: null, // 当前帧脸部 props（预留）
     update(_t) {},
-    async load(url, danceBase) {
+    async load(url, danceBase, outlineWidth) {
+      if (!(outlineWidth >= 0)) outlineWidth = OUTLINE_WIDTH // NaN/缺省 → 默认；0 = 关闭
       const [gltfMod, dracoMod] = await Promise.all([
         import('three/addons/loaders/GLTFLoader.js'),
         import('three/addons/loaders/DRACOLoader.js'),
@@ -47,11 +76,13 @@ export function createCharacter(scene) {
       model.position.z -= (b2.min.z + b2.max.z) / 2
       model.position.y -= b2.min.y
       model.rotation.y = MODEL_YAW
+      const outlineLocal = outlineWidth > 0 ? outlineWidth / model.scale.x : 0
       model.traverse((o) => {
         if (o.isMesh) {
           o.castShadow = true // 舞台主光投影（README 约定）
           o.receiveShadow = false
           if (o.isSkinnedMesh) o.frustumCulled = false // 跳舞时包围盒会跑掉，直接关掉裁剪
+          if (outlineLocal > 0 && !o.name.endsWith('__outline')) addOutlineShell(o, outlineLocal)
         }
       })
       group.add(model)
