@@ -1,7 +1,7 @@
 // 玩家模式：角色脱离舞蹈（歌曲/场景时间轴照走），由第一人称 / 第三人称镜头控制。只动角色和相机，不碰场景。
 //   WASD 前后左右 · 空格 跳 · 按住 Shift 蹲 · Ctrl 或双击 W 跑
 //   双击空格 进入/退出飞行（像 MC）：飞行时按住空格上升、Shift 下降，有加速度和阻尼
-//   V 切换 第一人称 / 背后第三人称 / 正面第三人称 · 1–9 特色动作 · 鼠标看（点画面锁定指针，Esc 释放）
+//   V 切换 第一人称 / 背后第三人称 / 正面第三人称 · 1–8 特色动作 · 鼠标看（点画面锁定指针，Esc 释放）
 // 动作：public/data/moves.glb（tools/retarget_bvh.py 把 BVH 重定向到 v2c 骨架，原地播放），速度见 moves.json。
 import * as THREE from 'three'
 
@@ -13,6 +13,18 @@ const FLY = 6, FLY_SPRINT = 14, FLY_V = 5 // m/s
 const DOUBLE_TAP = 0.3 // 秒
 // jump 片段（jump_standing，30fps）：44 帧前是蹲下蓄力，47 离地，53 腾空最高，59 落地，72 站稳
 const JUMP_T = { start: 44 / 30, hold: 53 / 30, land: 59 / 30, end: 72 / 30 }
+
+// 特色动作（数字键 1–8）：前两个来自之前的三渲二版本，中间四段从 v2c 舞蹈里截（带当时的表情），最后两段是《我的悲伤是水做的》
+const EMOTES = [
+  { name: 'emote_wave', label: '挥手' },
+  { name: 'emote_heart', label: '比心' },
+  { name: 'emote_lmg_wink', label: '眨眼', dance: [119.4, 122.6] },
+  { name: 'emote_lmg_hook', label: '写JSON', dance: [15.5, 20.5] },
+  { name: 'emote_lmg_chorus', label: '副歌', dance: [53.0, 58.0] },
+  { name: 'emote_lmg_honey', label: '举手', dance: [62.0, 67.0] },
+  { name: 'emote_bbw_chorus', label: '水·副歌' },
+  { name: 'emote_bbw_handsup', label: '水·举手' },
+]
 
 const _v = new THREE.Vector3()
 const _q = new THREE.Quaternion()
@@ -41,6 +53,7 @@ export function createPlayer({ character, camera, canvas, hud }) {
   let blink = { next: 2, t: -1 }
   let idleAlt = 0
   let emotes = []
+  let hipsBind = null
 
   function fade(name, dur = 0.22, timeScale = 1) {
     const a = acts[name]
@@ -61,6 +74,13 @@ export function createPlayer({ character, camera, canvas, hud }) {
     ])
     const g = await new GLTFLoader().loadAsync('./data/moves.glb')
     meta = info
+    // Hips 的绑定姿势朝向（算舞蹈片段起点朝向用）
+    character.model.traverse((o) => {
+      if (o.isSkinnedMesh && !hipsBind) {
+        const i = o.skeleton.bones.findIndex((b) => b.name === 'Hips')
+        if (i >= 0) hipsBind = new THREE.Quaternion().setFromRotationMatrix(o.skeleton.boneInverses[i].clone().invert())
+      }
+    })
     mixer = new THREE.AnimationMixer(character.model)
     for (const clip of g.animations) {
       const a = mixer.clipAction(clip)
@@ -71,7 +91,53 @@ export function createPlayer({ character, camera, canvas, hud }) {
       }
       acts[clip.name] = a
     }
-    emotes = g.animations.filter((c) => c.name.startsWith('emote_')).map((c) => c.name)
+    // 特色动作：emotes.glb（水做的两段 + 旧三渲二的挥手/比心）+ 从已加载的 v2c 舞蹈里截的四段
+    const [eg, emeta] = await Promise.all([
+      new GLTFLoader().loadAsync('./data/emotes.glb'),
+      fetch('./data/emotes.json').then((r) => r.json()),
+    ])
+    const clips = Object.fromEntries(eg.animations.map((c) => [c.name, c]))
+    for (const e of EMOTES) {
+      let clip = clips[e.name]
+      if (e.dance && character.clip) {
+        const off = 1 / 120 // 舞蹈 glb 第 1 帧在 1/120 秒
+        clip = new THREE.AnimationClip(e.name, -1, character.clip.tracks.map((tr) => tr.clone().trim(e.dance[0] + off, e.dance[1] + off).shift(-(e.dance[0] + off))))
+      }
+      if (!clip) continue
+      e.yaw = inPlace(clip)
+      e.meta = emeta[e.name]
+      const a = mixer.clipAction(clip)
+      a.setLoop(THREE.LoopOnce, 1)
+      a.clampWhenFinished = true
+      acts[e.name] = a
+      emotes.push(e)
+    }
+  }
+  // 舞蹈片段原地化：Hips 水平位移减去起点；返回起点时的朝向（让动作从角色当前朝向开始）
+  function inPlace(clip) {
+    const pos = clip.tracks.find((t) => t.name === 'Hips.position')
+    if (pos) {
+      const x0 = pos.values[0], z0 = pos.values[2]
+      for (let i = 0; i < pos.values.length; i += 3) {
+        pos.values[i] -= x0
+        pos.values[i + 2] -= z0
+      }
+    }
+    // 朝向取整段的平均（段首可能正在转身）
+    const rot = clip.tracks.find((t) => t.name === 'Hips.quaternion')
+    if (!rot || !hipsBind) return 0
+    const inv = hipsBind.clone().invert()
+    const q = new THREE.Quaternion()
+    const f = new THREE.Vector3()
+    let sx = 0, sz = 0
+    for (let i = 0; i < rot.values.length; i += 4) {
+      q.fromArray(rot.values, i).multiply(inv)
+      f.set(0, 0, 1).applyQuaternion(q)
+      const l = Math.hypot(f.x, f.z) || 1
+      sx += f.x / l
+      sz += f.z / l
+    }
+    return Math.atan2(sx, sz)
   }
 
   const api = {
@@ -125,7 +191,7 @@ export function createPlayer({ character, camera, canvas, hud }) {
     },
     help() {
       const v = { fp: '第一人称', back: '背后', front: '正面' }[view]
-      return `${v}${flying ? ' · 飞行中' : ''} ｜ WASD 移动 · 空格 跳 · Shift 蹲 · Ctrl/双击W 跑 · 双击空格 飞行 · V 视角 · 1–${Math.max(1, emotes.length)} 特色动作 · 点画面锁定鼠标`
+      return `${v}${flying ? ' · 飞行中' : ''} ｜ WASD 移动 · 空格 跳 · Shift 蹲 · Ctrl/双击W 跑 · 双击空格 飞行 · V 视角 · 点画面锁定鼠标\n特色动作：${emotes.map((e, i) => `${i + 1} ${e.label}`).join('  ')}`
     },
     onMouse(dx, dy) {
       yaw -= dx * 0.0025
@@ -161,10 +227,11 @@ export function createPlayer({ character, camera, canvas, hud }) {
         view = view === 'fp' ? 'back' : view === 'back' ? 'front' : 'fp'
         hud?.(api.help())
       } else if (/^Digit[1-9]$/.test(c)) {
-        const name = emotes[+c.slice(5) - 1]
-        if (name && grounded && !flying) {
-          emote = { name }
-          const a = acts[name]
+        const e = emotes[+c.slice(5) - 1]
+        if (e && grounded && !flying) {
+          stopEmote()
+          emote = { name: e.name, e, t: 0 }
+          const a = acts[e.name]
           a.reset().setEffectiveWeight(1).fadeIn(0.25).play()
           if (base) acts[base].fadeOut(0.25)
           base = null
@@ -230,8 +297,9 @@ export function createPlayer({ character, camera, canvas, hud }) {
         if (hips) hips.position.y = Math.min(hips.position.y, 0.905)
       }
       faceBlink(dt)
+      if (emote) emote.t += dt
       character.model.position.copy(p)
-      character.model.rotation.set(0, charYaw, 0)
+      character.model.rotation.set(0, charYaw - (emote?.e.yaw || 0), 0)
       placeCamera()
       if (api._lastHelp !== flying) {
         api._lastHelp = flying
@@ -375,9 +443,24 @@ export function createPlayer({ character, camera, canvas, hud }) {
     }
     u.uFaceEyeR.value = eye
     u.uFaceEyeL.value = eye
-    u.uFaceMouth.value = emote ? 6 : 0 // 做动作时嘴角上扬
+    u.uFaceMouth.value = 0
     u.uFaceIrisR.value.set(0, 0)
     u.uFaceIrisL.value.set(0, 0)
+    // 特色动作带表情：v2c 段用当时的表情轨，水做的段用导出的逐帧值，旧动作固定笑脸
+    const e = emote?.e
+    if (!e) return
+    if (e.dance && character.face) character.face.apply(character.material, e.dance[0] + emote.t)
+    else {
+      const f = e.meta?.face ? e.meta.face[Math.min(e.meta.face.length - 1, Math.round(emote.t * 30))] : e.meta?.face_fixed
+      if (f) {
+        u.uFaceEyeR.value = f[0]
+        u.uFaceEyeL.value = f[1]
+        u.uFaceMouth.value = f[2]
+        u.uFaceIrisR.value.set(f[3], f[4])
+        u.uFaceIrisL.value.set(f[5], f[6])
+        u.uFaceIrisScale.value = f[7]
+      }
+    }
   }
 
   function placeCamera() {

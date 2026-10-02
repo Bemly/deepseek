@@ -128,6 +128,7 @@ async function main() {
     },
   })
   window.__player = player // 调试/自动化用
+  window.__character = character
   $('fpBtn').onclick = async () => {
     if (player.active) player.exit()
     else {

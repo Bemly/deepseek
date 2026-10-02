@@ -62,7 +62,8 @@ html, body { margin: 0; height: 100%; background: #04070f; color: var(--fg); ove
   background: rgba(8, 14, 32, 0.62);
   color: #dbe7ff;
   font-size: 12px;
-  white-space: nowrap;
+  white-space: pre;
+  text-align: center;
   pointer-events: none;
 }
 #fpBtn.on {

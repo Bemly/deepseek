@@ -39,7 +39,8 @@ npm run dev   # 仓库自带 public/audio/let-me-go.mp3；也可以替换或在�
     blend 版·无阴影 = 同上，角色不做卡通明暗/边缘光、不投影（和 `work/bake_no_shadow.py` 的无阴影版一致）；「简洁」关掉泛光/故障/暗角
 - **第一人称**（底栏按钮）：角色脱离舞蹈由你控制，歌曲和场景时间轴照走。WASD 前后左右、空格跳、按住 Shift 蹲、Ctrl 或双击 W 跑；
   双击空格进入/退出飞行（像 MC），飞行时按住空格上升、Shift 下降，带加速度和阻尼；V 切换第一人称 / 背后 / 正面视角；
-  点画面锁定鼠标转视角（Esc 释放）。移动动作来自 Motifect Locomotion Motion Pack（免费，可用于项目，不得单独再分发原始文件），
+  点画面锁定鼠标转视角（Esc 释放）。数字键 1–8 特色动作：挥手、比心（之前三渲二版本的动作，重定向过来）、
+  眨眼 / 写JSON / 副歌 / 举手（从 v2c 的 Let Me Go 舞蹈里截，带当时的表情）、水·副歌 / 水·举手（《我的悲伤是水做的》）。移动动作来自 Motifect Locomotion Motion Pack（免费，可用于项目，不得单独再分发原始文件），
   由 `tools/retarget_bvh.py` 重定向到 v2c 骨架后放在 `public/data/moves.glb`（原始 BVH/FBX 不进仓库）
 - URL 参数：`?model=blend|ref|hidden`、`?cam=blend|manual`、`?pipe=web|blend|blend-flat|simple`、`?outline=0` 关角色描边
 - 左上角切场景（手动切是 2.4 秒溶解过渡）；勾上「按段落切场景」则按 `DEMO_THEME_SCHEDULE` 跟着歌曲时间自动切
