@@ -128,7 +128,10 @@ async function main() {
   }
   modelSel.onchange = applyModelMode
   character
-    .load(params.get('modelbase') || './models/dschan-blend.glb')
+    .load(
+      params.get('modelbase') || './models/dschan-blend.glb',
+      params.get('dancebase') || './data/dance-30fps',
+    )
     .then(applyModelMode)
     .catch((err) => {
       character.failed = true
