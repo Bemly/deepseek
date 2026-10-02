@@ -32,7 +32,11 @@ npm run dev   # 仓库自带 public/audio/let-me-go.mp3；也可以替换或在�
 
 - 空格播放/暂停，←/→ 快进快退 5 秒，1–7 切机位，H 隐藏界面
 - 右上角机位：正面 / 近景 / 全景 / 城市 / 侧面 / 背面 / 俯瞰；「漫游」绕舞台慢转
-- 「身高参考」是一个 20 单位高的半透明人形，代表 MMD 角色的大小和站位，只在预览页里有
+- 底栏三个下拉框都默认「blend 版」，即和 `LetMeGo-dschan_v2c.blend` 渲染的成片一致（只换角色/运镜/后期，场景不动）：
+  - **模型**：blend 版 = v2c 的角色、舞蹈、口型/笑容/眨眼、卡通材质与描边；也可切「身高参考」（20 单位高的半透明人形）或隐藏。数据见 `public/models/README.md`
+  - **运镜**：blend 版 = v2c 的 DS_Cam / DS_CamOrtho（含 104 秒后跟脸的 v3 运镜，`public/data/camera-blend-v3.json`）；「手动」才用右上角机位和漫游
+  - **管线**：blend 版 = v2c 的 `post_final.py`（角色单独一层盖在 ACES 之后的场景上）；「web原版」是仓库原来的后期链，「简洁」关掉泛光/故障/暗角
+- URL 参数：`?model=blend|ref|hidden`、`?cam=blend|manual`、`?pipe=blend|web|simple`、`?outline=0` 关角色描边
 - 左上角切场景（手动切是 2.4 秒溶解过渡）；勾上「按段落切场景」则按 `DEMO_THEME_SCHEDULE` 跟着歌曲时间自动切
 - URL 参数：`?t=51.4` 从某秒开始，`?view=wide` 初始机位，`?theme=atlantis` 初始场景，`?q=low|high|ultra` 画质，`?ui=0` 隐藏界面，`?bloom=0` 关泛光
 
@@ -159,8 +163,12 @@ src/
   index.js        对外入口
   lyrics.js       歌词时间轴、段落、工具调用时间点、示例场景排程
   state.js        computeState(t)：歌曲时间 → 场景状态（纯函数）
-  postfx.js       后期（主题溶解过渡、高光钳制、泛光、调色、故障）
+  postfx.js       后期（主题溶解过渡、高光钳制、泛光、调色、故障；BlendPipeline = v2c 合成）
   main.js         预览页
+  blend-camera.js v2c 运镜（blend 坐标 ×12.5 → web）
+  character.js    v2c 角色：模型、舞蹈（AnimationMixer）、描边壳、holdout/角色层切换
+  character-material.js  v2c TOON 材质 + 表情 + 主题色调
+  face-expression.js     表情合成着色器（tools/nodes2glsl.py 生成）
   world/
     index.js      场景总装 + 主题切换（共用天空/海面/灯光，每个主题一套 root）
     themes/       harbor / ancient / japan / clouds / atlantis 五个主题
@@ -177,7 +185,7 @@ src/
     textures.js   程序化贴图（木纹、徽章、招牌、乐谱、酒标、碗）
 ```
 
-全部几何和贴图都是代码生成的，没有外部模型或图片。
+场景的几何和贴图都是代码生成的；角色模型、舞蹈和贴图来自 v2c（`public/models`、`public/data`，导出脚本在 `tools/`）。
 
 ## 素材说明
 
