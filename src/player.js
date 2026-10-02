@@ -1,7 +1,8 @@
 // 玩家模式：角色脱离舞蹈（歌曲/场景时间轴照走），由第一人称 / 第三人称镜头控制。只动角色和相机，不碰场景。
 //   WASD 前后左右 · 空格 跳 · 按住 Shift 蹲 · Ctrl 或双击 W 跑
 //   双击空格 进入/退出飞行（像 MC）：飞行时按住空格上升、Shift 下降，有加速度和阻尼
-//   V 切换 第一人称 / 背后第三人称 / 正面第三人称 · 1–8 特色动作 · 鼠标看（点画面锁定指针，Esc 释放）
+//   V 切换 第一人称 / 背后第三人称 / 正面第三人称（设置面板里也能选）· 滚轮调第三人称距离 · 1–0 特色动作 · 鼠标看（点画面锁定指针，Esc 释放）
+// 和场景有碰撞（collision.js）：角色是一个胶囊体，能站在台阶/屋顶上，撞墙会停，第三人称相机被挡时会拉近。
 // 头发/裙摆/尾巴/耳朵用弹簧骨随动（springbones.js）。
 // 动作风格（可切换，缺的槽位回退到 Motifect）：
 //   少女MMD  向前走 Chibi walk（tweekcrystal）、向前跑 女の子走り（@fuudo_food_0309）—— tools/retarget_vmd.py
@@ -19,6 +20,9 @@ const WALK = 0.9, RUN = 3.0, CROUCH = 0.8 // m/s（走 = 小碎步，片段 0.35
 const FLY = 6, FLY_SPRINT = 14, FLY_V = 5 // m/s
 const FLY_MAX_BOOST = 32 // 按住移动时每 2 秒速度翻倍（和手动机位一样），最高 32 倍
 const DOUBLE_TAP = 0.3 // 秒
+// 碰撞胶囊（米）：半径、站立高度、下蹲高度；下台阶时最多往下吸附的高度
+const CAP_R = 0.2, CAP_H = 1.42, CAP_H_CROUCH = 1.0, SNAP = 0.35
+export const VIEWS = { fp: '第一人称', back: '第三人称（背后）', front: '第三人称（正面）' }
 // Motifect 的 jump_standing（30fps）：44 帧前是蹲下蓄力，47 离地，53 腾空最高，59 落地，72 站稳 → 切成三段
 const MOTIFECT_JUMP = { jump_start: [44 / 30, 53 / 30], jump_air: [53 / 30, 54 / 30], jump_land: [59 / 30, 72 / 30] }
 const PACKS = {
@@ -57,7 +61,7 @@ const _e = new THREE.Euler()
 const angleTo = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a))
 const approach = (x, target, step) => (x < target ? Math.min(target, x + step) : Math.max(target, x - step))
 
-export function createPlayer({ character, camera, canvas, hud }) {
+export function createPlayer({ character, camera, canvas, hud, collider = null }) {
   const keys = new Set()
   const lastTap = {}
   const p = new THREE.Vector3() // 脚底位置（web 单位）
@@ -71,6 +75,11 @@ export function createPlayer({ character, camera, canvas, hud }) {
   let flyHold = 0 // 飞行中按住移动键的时长
   let boost = 1
   let view = 'fp'
+  let camDist = 3.4 // 第三人称相机距离（米），滚轮调
+  let camCur = camDist * M // 实际距离（被墙挡住时拉近）
+  const contact = { hit: false, up: -1, down: 1, wall: new THREE.Vector3() }
+  const _s0 = new THREE.Vector3()
+  const _s1 = new THREE.Vector3()
   let mixer = null
   let acts = {}
   let base = null // 当前循环动作（pack/clip）
@@ -208,9 +217,20 @@ export function createPlayer({ character, camera, canvas, hud }) {
 
   const api = {
     active: false,
-    _debug: () => ({ flyW: flyW.v, flying, grounded, view, base, jump: jump && `${jump.phase}:${jump.k}`, emote: emote?.name, p: p.toArray().map((x) => +x.toFixed(1)) }),
+    _debug: () => ({ yaw, flyW: flyW.v, flying, grounded, view, vel: vel.toArray().map((x) => +x.toFixed(2)), base, jump: jump && `${jump.phase}:${jump.k}`, emote: emote?.name, p: p.toArray().map((x) => +x.toFixed(1)) }),
     get view() {
       return view
+    },
+    setView(v) {
+      if (!VIEWS[v] || v === view) return
+      view = v
+      api.onView?.(view)
+      hud?.(api.help())
+    },
+    onView: null,
+    onWheel(dy) {
+      if (view === 'fp') return
+      camDist = THREE.MathUtils.clamp(camDist * Math.exp(dy * 0.001), 1.2, 12)
     },
     ensureLoaded: () => load(),
     get style() {
@@ -276,6 +296,7 @@ export function createPlayer({ character, camera, canvas, hud }) {
       character.model.position.copy(p)
       character.model.rotation.set(0, charYaw, 0)
       api.active = true
+      collider?.warm(p, 250 * M) // 周围 250 m 的场景几何先建好 BVH
       hud?.(api.help())
     },
     exit() {
@@ -291,9 +312,9 @@ export function createPlayer({ character, camera, canvas, hud }) {
       hud?.('')
     },
     help() {
-      const v = { fp: '第一人称', back: '背后', front: '正面' }[view]
+      const v = VIEWS[view]
       const keyOf = (i) => (i < 9 ? String(i + 1) : i === 9 ? '0' : null)
-      return `${v} · ${STYLES[style].label}${flying ? ` · 飞行中${boost >= 2 ? ` ×${Math.floor(boost)}` : ''}` : ''} ｜ WASD 移动 · 空格 跳 · Shift 蹲 · Ctrl/双击W 跑 · 双击空格 飞行 · V 视角 · 点画面锁定鼠标\n特色动作：${emotes
+      return `${v} · ${STYLES[style].label}${flying ? ` · 飞行中${boost >= 2 ? ` ×${Math.floor(boost)}` : ''}` : ''} ｜ WASD 移动 · 空格 跳 · Shift 蹲 · Ctrl/双击W 跑 · 双击空格 飞行 · V 视角${view === 'fp' ? '' : ' · 滚轮 远近'} · 点画面锁定鼠标\n特色动作：${emotes
         .map((e, i) => keyOf(i) && `${keyOf(i)} ${e.label}`)
         .filter(Boolean)
         .join('  ')}`
@@ -329,8 +350,7 @@ export function createPlayer({ character, camera, canvas, hud }) {
         lastTap.KeyW = now
       } else if (c === 'ControlLeft' || c === 'ControlRight') sprint = true
       else if (c === 'KeyV') {
-        view = view === 'fp' ? 'back' : view === 'back' ? 'front' : 'fp'
-        hud?.(api.help())
+        api.setView(view === 'fp' ? 'back' : view === 'back' ? 'front' : 'fp')
       } else if (/^Digit[0-9]$/.test(c)) {
         const d = +c.slice(5)
         const e = emotes[d === 0 ? 9 : d - 1]
@@ -380,20 +400,9 @@ export function createPlayer({ character, camera, canvas, hud }) {
         const acc = grounded ? (il ? 14 : 18) : 4
         vel.x = approach(vel.x, wx * top * (il ? 1 : 0), acc * dt)
         vel.z = approach(vel.z, wz * top * (il ? 1 : 0), acc * dt)
-        if (!grounded) vel.y -= G * dt
       }
-      p.x += vel.x * dt * M
-      p.z += vel.z * dt * M
-      p.y += vel.y * dt * M
-      if (p.y <= 0) {
-        p.y = 0
-        if (!grounded && vel.y <= 0) {
-          grounded = true
-          if (flying) flying = false // 飞到地面就落地（和 MC 一样）
-          land(vel.y)
-        }
-        vel.y = Math.max(0, vel.y)
-      } else if (!flying && grounded && p.y > 0.01) grounded = false
+      // ---- 移动 + 碰撞
+      move(dt, crouchKey)
       // ---- 朝向：第一人称跟镜头；第三人称转向移动方向
       const hs = Math.hypot(vel.x, vel.z)
       const want = view === 'fp' ? yaw : hs > 0.2 ? Math.atan2(vel.x, vel.z) : charYaw
@@ -416,13 +425,84 @@ export function createPlayer({ character, camera, canvas, hud }) {
       springs.weight = approach(springs.weight, character.physics ? 1 : 0, dt * 3)
       character.model.updateMatrixWorld(true)
       springs.update(dt)
-      placeCamera()
+      placeCamera(dt)
       const hk = `${flying}|${Math.floor(boost)}`
       if (api._lastHelp !== hk) {
         api._lastHelp = hk
         hud?.(api.help())
       }
     },
+  }
+
+  // 重力一直加（站着时由地面顶回来，这样踩空/走下坡会自然掉下去）；按胶囊半径的一半分步走，防高速穿墙
+  function move(dt, crouch) {
+    if (!flying) vel.y -= G * dt
+    const vy0 = vel.y
+    let dx = vel.x * dt * M, dy = vel.y * dt * M, dz = vel.z * dt * M
+    const r = CAP_R * M
+    let dist = Math.hypot(dx, dy, dz)
+    if (collider && dist > r) {
+      // 一帧走得比半径还远（飞行加速）：先沿运动方向打一条射线，别穿过薄墙
+      _v.set(dx, dy, dz).divideScalar(dist)
+      const hit = collider.raycast(_s0.set(p.x, p.y + (crouch ? CAP_H_CROUCH : CAP_H) * M * 0.5, p.z), _v, dist + r)
+      if (hit < dist + r) {
+        const k = Math.max(0, hit - r) / dist
+        dx *= k
+        dy *= k
+        dz *= k
+        dist *= k
+      }
+    }
+    const n = collider ? Math.min(24, Math.max(1, Math.ceil(dist / (r * 0.5)))) : 1
+    let onGround = false
+    for (let i = 0; i < n; i++) {
+      p.x += dx / n
+      p.y += dy / n
+      p.z += dz / n
+      if (collider && collide(crouch)) onGround = true
+    }
+    // 台面/水面 y = 0 一直当地面
+    if (p.y <= 0) {
+      p.y = 0
+      onGround = true
+    }
+    // 走下台阶/下坡：刚才还站着、没在跳，就往下吸附到地面
+    if (!onGround && grounded && !flying && !jump && collider) {
+      const d = collider.raycast(_s0.set(p.x, p.y + r, p.z), _v.set(0, -1, 0), r + SNAP * M)
+      if (d < Infinity) {
+        p.y = Math.max(0, p.y + r - d)
+        collide(crouch)
+        onGround = true
+      }
+    }
+    if (onGround && vel.y <= 0) {
+      vel.y = 0
+      if (!grounded) {
+        grounded = true
+        if (flying) flying = false // 飞到地面就落地（和 MC 一样）
+        land(vy0)
+      }
+    } else if (!onGround && !flying) grounded = false
+  }
+  // 胶囊和场景求交，把角色推出来；返回是否踩在地上
+  function collide(crouch) {
+    const r = CAP_R * M
+    const h = (crouch ? CAP_H_CROUCH : CAP_H) * M
+    _s0.set(p.x, p.y + r, p.z)
+    _s1.set(p.x, p.y + h - r, p.z)
+    const c = collider.capsule(_s0, _s1, r, contact)
+    if (!c.hit) return false
+    p.set(_s0.x, _s0.y - r, _s0.z)
+    if (c.down < -0.5 && vel.y > 0) vel.y = 0 // 撞头
+    if (c.wall.lengthSq() > 0) {
+      // 撞墙：去掉朝墙的速度分量（贴墙滑动）
+      const vn = vel.x * c.wall.x + vel.z * c.wall.z
+      if (vn < 0) {
+        vel.x -= c.wall.x * vn
+        vel.z -= c.wall.z * vn
+      }
+    }
+    return c.up > 0.55
   }
 
   // 跳：起跳（一次）→ 空中（循环到落地）→ 落地（一次），每种风格都按这三段走
@@ -581,7 +661,7 @@ export function createPlayer({ character, camera, canvas, hud }) {
     }
   }
 
-  function placeCamera() {
+  function placeCamera(dt = 0) {
     const cp = Math.cos(pitch)
     const dir = _v.set(Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp)
     camera.up.set(0, 1, 0)
@@ -601,9 +681,16 @@ export function createPlayer({ character, camera, canvas, hud }) {
       character.group.visible = true
     } else {
       const pivot = p.clone().add(new THREE.Vector3(0, 1.15 * M, 0))
-      const dist = 3.4 * M
       const s = view === 'back' ? -1 : 1
-      camera.position.copy(pivot).addScaledVector(dir, s * dist)
+      // 相机被墙/建筑挡住就拉近（瞬间拉近，慢慢退回）
+      let want = camDist * M
+      if (collider) {
+        const out = _s1.copy(dir).multiplyScalar(s)
+        const hit = collider.raycast(pivot, out, want + 0.3 * M)
+        if (hit < Infinity) want = Math.max(0.35 * M, hit - 0.3 * M)
+      }
+      camCur = want < camCur || !dt ? want : approach(camCur, want, dt * 4 * M + (want - camCur) * Math.min(1, dt * 6))
+      camera.position.copy(pivot).addScaledVector(dir, s * camCur)
       camera.position.y = Math.max(camera.position.y, 0.3 * M)
       camera.lookAt(pivot)
       camera.fov = 50

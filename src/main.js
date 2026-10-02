@@ -5,6 +5,7 @@ import { createPostFX } from './postfx.js'
 import { loadBlendCamera, updateBlendCamera } from './blend-camera.js'
 import { createCharacter } from './character.js'
 import { createPlayer } from './player.js'
+import { createWorldCollider } from './collision.js'
 import { createMotionImport } from './motion-import.js'
 import { SONG, SECTIONS, DEMO_THEME_SCHEDULE } from './lyrics.js'
 
@@ -83,7 +84,11 @@ async function main() {
     })
   camSel.value = camMode()
   // 生成是同步的，先让"正在生成场景…"画出来
-  await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)))
+  // 后台标签页里 rAF 不触发：最多等 200ms 就继续，不然整个初始化会卡住
+  await new Promise((r) => {
+    requestAnimationFrame(() => setTimeout(r, 0))
+    setTimeout(r, 200)
+  })
   const world = createWorld(renderer, { quality, initial: params.get('theme') || defaults.theme }).attach(scene)
   const post = createPostFX(renderer, scene, camera, { bloom: params.get('bloom') !== '0', world })
 
@@ -133,10 +138,13 @@ async function main() {
   const character = createCharacter(scene)
   post.setCharacter(character)
   // 玩家模式：第一人称按钮 → 角色脱离舞蹈，WASD/空格/Shift 控制（歌曲和场景时间轴照走）
+  const collider = createWorldCollider(world) // 自由控制的场景碰撞（只读场景网格）
+  window.__collider = collider
   const player = createPlayer({
     character,
     camera,
     canvas,
+    collider,
     hud: (text) => {
       const on = player?.active && !!text
       $('playerHud').hidden = !on
@@ -182,6 +190,21 @@ async function main() {
       canvas.requestPointerLock?.()
     } else if (ctrlSel.value === 'dance' && player.active) player.exit()
   }
+  // 自由控制的视角：第一人称 / 第三人称（背后、正面），V 键切换时同步下拉框
+  const viewSel = $('viewMode')
+  viewSel.value = store.get('ds-player-view') || 'fp'
+  player.setView(viewSel.value)
+  player.onView = (v) => {
+    viewSel.value = v
+    store.set('ds-player-view', v)
+  }
+  viewSel.onchange = () => {
+    player.setView(viewSel.value)
+    viewSel.blur()
+  }
+  canvas.addEventListener('wheel', (e) => {
+    if (player.active) player.onWheel(e.deltaY)
+  }, { passive: true })
   // 头发/裙摆/尾巴/耳朵：物理（弹簧骨实时算）/ K帧（动画里的关键帧）
   const hairSel = $('hairMode')
   hairSel.value = params.get('hair') || store.get('ds-hair-mode') || 'phys'
