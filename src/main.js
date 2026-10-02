@@ -227,12 +227,22 @@ async function main() {
     $('marks').append(b)
   })
 
+  // 手动飞行：WASD 前后左右，空格上，Shift 下（只在手动运镜时生效；blend 运镜由歌曲时间接管）
+  const fly = new Set()
+  const FLY_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight'])
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' && e.target.type !== 'range') return
-    if (e.code === 'Space') {
+    if (e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return
+    if (FLY_KEYS.has(e.code)) {
       e.preventDefault()
-      togglePlay()
-    } else if (e.code === 'ArrowRight') setTime(clock + 5)
+      if (!e.repeat) {
+        fly.add(e.code)
+        if ($('tour').checked) $('tour').checked = false // 一接管就停漫游
+      }
+      return
+    }
+    if (e.code === 'KeyP') togglePlay()
+    else if (e.code === 'ArrowRight') setTime(clock + 5)
     else if (e.code === 'ArrowLeft') setTime(clock - 5)
     else if (e.key === 'h' || e.key === 'H') $('ui').classList.toggle('hidden')
     else if (e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
@@ -240,6 +250,32 @@ async function main() {
       if (th) themeButtons[+e.code.slice(5) - 1].click()
     } else if (/^[1-7]$/.test(e.key)) setView(Object.keys(VIEWS)[+e.key - 1])
   })
+  window.addEventListener('keyup', (e) => fly.delete(e.code))
+  window.addEventListener('blur', () => fly.clear())
+
+  const _fwd = new THREE.Vector3()
+  const _right = new THREE.Vector3()
+  const _up = new THREE.Vector3(0, 1, 0)
+  const FLY_SPEED = 60 // MMD 单位/秒
+  function flyStep(dt) {
+    if (!fly.size) return
+    camera.getWorldDirection(_fwd)
+    _fwd.y = 0
+    if (_fwd.lengthSq() < 1e-6) _fwd.set(0, 0, -1)
+    _fwd.normalize()
+    _right.crossVectors(_fwd, _up)
+    const mx = (fly.has('KeyD') ? 1 : 0) - (fly.has('KeyA') ? 1 : 0)
+    const mz = (fly.has('KeyW') ? 1 : 0) - (fly.has('KeyS') ? 1 : 0)
+    const my = (fly.has('Space') ? 1 : 0) - (fly.has('ShiftLeft') || fly.has('ShiftRight') ? 1 : 0)
+    if (!mx && !mz && !my) return
+    const sp = FLY_SPEED * dt
+    camera.position.addScaledVector(_fwd, mz * sp)
+    camera.position.addScaledVector(_right, mx * sp)
+    camera.position.y += my * sp
+    controls.target.addScaledVector(_fwd, mz * sp)
+    controls.target.addScaledVector(_right, mx * sp)
+    controls.target.y += my * sp
+  }
 
   $('quality').onchange = (e) => {
     // 画质影响反射分辨率等初始化参数，存起来后重新加载
@@ -319,6 +355,7 @@ async function main() {
       post.setCamera(activeCam)
     } else {
       if ($('tour').checked) post.setCamera(camera)
+      else flyStep(dt)
       controls.update()
     }
     const s = world.update(clock, activeCam)
