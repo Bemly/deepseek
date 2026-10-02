@@ -41,7 +41,9 @@ npm run dev   # 仓库自带 public/audio/let-me-go.mp3；也可以替换或在�
   双击空格进入/退出飞行（像 MC），飞行时按住空格上升、Shift 下降，带加速度和阻尼；V 切换第一人称 / 背后 / 正面视角；
   点画面锁定鼠标转视角（Esc 释放）。数字键 1–8 特色动作：挥手、比心（之前三渲二版本的动作，重定向过来）、
   眨眼 / 写JSON / 副歌 / 举手（从 v2c 的 Let Me Go 舞蹈里截，带当时的表情）、水·副歌 / 水·举手（《我的悲伤是水做的》）。移动动作来自 Motifect Locomotion Motion Pack（免费，可用于项目，不得单独再分发原始文件），
-  由 `tools/retarget_bvh.py` 重定向到 v2c 骨架后放在 `public/data/moves.glb`（原始 BVH/FBX 不进仓库）
+  由 `tools/retarget_bvh.py` 重定向到 v2c 骨架后放在 `public/data/moves.glb`（原始 BVH/FBX 不进仓库）。
+  向前走 / 跑换成少女向的 MMD 动作（`tools/retarget_vmd.py` 重定向，`public/data/moves-vmd.glb`）：
+  走 = Chibi walk（Various Walk Cycles by tweekcrystal, DeviantArt）的小碎步，跑 = 女の子走りモーション（@fuudo_food_0309）
 - URL 参数：`?model=blend|ref|hidden`、`?cam=blend|manual`、`?pipe=web|blend|blend-flat|simple`、`?outline=0` 关角色描边
 - 左上角切场景（手动切是 2.4 秒溶解过渡）；勾上「按段落切场景」则按 `DEMO_THEME_SCHEDULE` 跟着歌曲时间自动切
 - URL 参数：`?t=51.4` 从某秒开始，`?view=wide` 初始机位，`?theme=atlantis` 初始场景，`?q=low|high|ultra` 画质，`?ui=0` 隐藏界面，`?bloom=0` 关泛光

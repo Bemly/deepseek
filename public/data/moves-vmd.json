@@ -1,0 +1,57 @@
+{
+ "girl_run": {
+  "src": "girlsrun.vmd",
+  "frames": 145,
+  "fps": 30,
+  "duration": 4.8,
+  "speed": [
+   0.0,
+   2.6379
+  ],
+  "credit": "女の子走りモーション @fuudo_food_0309（改変・再配布・商用可）"
+ },
+ "chibi_walk": {
+  "src": "Chibi walk.vmd",
+  "frames": 481,
+  "fps": 30,
+  "duration": 16.0,
+  "speed": [
+   0.0,
+   0.3532
+  ],
+  "credit": "Various Walk Cycles by tweekcrystal (DeviantArt)"
+ },
+ "chibi_run": {
+  "src": "Chibi run.vmd",
+  "frames": 257,
+  "fps": 30,
+  "duration": 8.5333,
+  "speed": [
+   -0.0,
+   1.2927
+  ],
+  "credit": "Various Walk Cycles by tweekcrystal (DeviantArt)"
+ },
+ "female_run": {
+  "src": "Female run.vmd",
+  "frames": 257,
+  "fps": 30,
+  "duration": 8.5333,
+  "speed": [
+   -0.0,
+   4.3091
+  ],
+  "credit": "Various Walk Cycles by tweekcrystal (DeviantArt)"
+ },
+ "normal_walk": {
+  "src": "Normal walk.vmd",
+  "frames": 481,
+  "fps": 30,
+  "duration": 16.0,
+  "speed": [
+   0.0,
+   1.1773
+  ],
+  "credit": "Various Walk Cycles by tweekcrystal (DeviantArt)"
+ }
+}

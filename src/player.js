@@ -10,7 +10,7 @@ import { createSpringBones } from './springbones.js'
 const M = 12.5 // 1 米 = 12.5 web 单位（blend → web）
 const G = 20 // 重力 m/s²
 const JUMP_V = 6.2 // 起跳速度 → 约 0.95 m 高
-const WALK = 1.5, RUN = 3.8, CROUCH = 0.8 // m/s
+const WALK = 0.9, RUN = 3.0, CROUCH = 0.8 // m/s（走 = 小碎步，片段 0.35 m/s × 约 2.6 倍步频）
 const FLY = 6, FLY_SPRINT = 14, FLY_V = 5 // m/s
 const DOUBLE_TAP = 0.3 // 秒
 // jump 片段（jump_standing，30fps）：44 帧前是蹲下蓄力，47 离地，53 腾空最高，59 落地，72 站稳
@@ -27,6 +27,8 @@ const EMOTES = [
   { name: 'emote_bbw_chorus', label: '水·副歌' },
   { name: 'emote_bbw_handsup', label: '水·举手' },
 ]
+
+const VMD_PICK = { walk: 'chibi_walk', run: 'girl_run' }
 
 const _v = new THREE.Vector3()
 const _q = new THREE.Quaternion()
@@ -71,11 +73,25 @@ export function createPlayer({ character, camera, canvas, hud }) {
 
   async function load() {
     if (mixer) return
-    const [{ GLTFLoader }, info] = await Promise.all([
+    const [{ GLTFLoader }, info, vinfo] = await Promise.all([
       import('three/addons/loaders/GLTFLoader.js'),
       fetch('./data/moves.json').then((r) => r.json()),
+      fetch('./data/moves-vmd.json').then((r) => r.json()).catch(() => ({})),
     ])
     const g = await new GLTFLoader().loadAsync('./data/moves.glb')
+    // 少女向的 MMD 走/跑（tools/retarget_vmd.py）：向前走用 Chibi walk 小碎步，向前跑用「女の子走り」
+    const vg = await new GLTFLoader().loadAsync('./data/moves-vmd.glb').catch(() => null)
+    if (vg) {
+      for (const [slot, src] of Object.entries(VMD_PICK)) {
+        const clip = vg.animations.find((c) => c.name === src)
+        if (!clip) continue
+        const i = g.animations.findIndex((c) => c.name === slot)
+        clip.name = slot
+        if (i >= 0) g.animations[i] = clip
+        else g.animations.push(clip)
+        info[slot] = vinfo[src] || info[slot]
+      }
+    }
     meta = info
     // Hips 的绑定姿势朝向（算舞蹈片段起点朝向用）
     character.model.traverse((o) => {
@@ -408,7 +424,7 @@ export function createPlayer({ character, camera, canvas, hud }) {
   function rate(name, speed) {
     const s = meta[name]?.speed
     const clipSpeed = s ? Math.hypot(s[0], s[1]) : 1
-    return THREE.MathUtils.clamp(speed / Math.max(0.2, clipSpeed), 0.5, 2.4)
+    return THREE.MathUtils.clamp(speed / Math.max(0.2, clipSpeed), 0.5, 2.7)
   }
 
   // 飞行姿势：在 idle 上叠加——小腿向后弯、脚尖绷直、身体随速度前倾、手臂微微张开（少女飞行的样子）
