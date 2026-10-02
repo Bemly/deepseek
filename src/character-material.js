@@ -29,9 +29,10 @@ attribute vec2 uv2;
 attribute vec4 color;
 attribute float _part_kind;
 attribute float _face_layer;
+attribute float _head_k;
 varying vec2 vUv0, vUv1, vUv2;
 varying vec3 vCap, vNormalV, vViewPos, vHeadW;
-varying float vPart, vFace;
+varying float vPart, vFace, vHeadK;
 #include <common>
 #include <skinning_pars_vertex>
 void main() {
@@ -41,6 +42,7 @@ void main() {
   vCap = color.rgb;
   vPart = _part_kind;
   vFace = _face_layer;
+  vHeadK = _head_k;
   #include <skinbase_vertex>
   #include <beginnormal_vertex>
   #include <skinnormal_vertex>
@@ -66,7 +68,7 @@ uniform vec3 uShadowTint, uMidTint, uLightTint, uRimColor;
 uniform float uRimStrength;
 varying vec2 vUv0, vUv1, vUv2;
 varying vec3 vCap, vNormalV, vViewPos, vHeadW;
-varying float vPart, vFace;
+varying float vPart, vFace, vHeadK;
 ${FACE_EXPRESSION_GLSL}
 vec3 rgb2hsv(vec3 c) {
   vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
@@ -91,7 +93,7 @@ float fresnelDielectric(float cosi, float eta) {
   return 0.5 * A * A * (1.0 + B * B);
 }
 void main() {
-  if (uHeadClip.w > 0.0 && distance(vHeadW, uHeadClip.xyz) < uHeadClip.w) discard;
+  if (uHeadClip.w > 0.0 && (vHeadK > 0.5 || distance(vHeadW, uHeadClip.xyz) < uHeadClip.w)) discard;
   if (uDepthTest > 0.5 && gl_FragCoord.z > texture2D(tSceneDepth, gl_FragCoord.xy / uViewport).r + 2e-5 + 3.0 * fwidth(gl_FragCoord.z)) discard;
   vec3 alb = texture2D(tAlbedo, vUv0).rgb;
   alb = mix(alb, vCap, abs(vPart - 1.0) <= 0.1 ? 1.0 : 0.0);                       // CAP_IsCap

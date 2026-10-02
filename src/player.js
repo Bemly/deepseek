@@ -411,6 +411,7 @@ export function createPlayer({ character, camera, canvas, hud, collider = null }
       animate(dt, hs, crouchKey)
       mixer.update(dt)
       flyPose(hs)
+      if (flyW.v > 0) uprightHead(flyW.v)
       if (jump && jump.phase !== 'land' && !base?.startsWith('hand/') && !jump.k?.startsWith('hand/')) {
         // 腾空高度交给物理，片段里 Hips 往上抬的部分去掉（只保留蓄力下蹲）
         const hips = character.model.getObjectByName('Hips')
@@ -623,6 +624,30 @@ export function createPlayer({ character, camera, canvas, hud, collider = null }
     rot('UpperArmR', 0, 0, 0.35 + 0.1 * Math.sin(t * 1.7))
   }
 
+  // 飞行时身体前倾，脖子和头往回抬，让头保持竖直、看向前方（超人式）。
+  // 不然第一人称的眼睛跟着头一起低下去，水平看出去就是从头顶/刘海里面穿出去
+  const _up = new THREE.Vector3()
+  const _qa = new THREE.Quaternion()
+  const _qp = new THREE.Quaternion()
+  const _qi = new THREE.Quaternion()
+  function uprightHead(w) {
+    const hk = headLocal()
+    const head = character.model.getObjectByName('Head')
+    if (!hk || !head) return
+    for (const [name, k] of [['Neck', 0.45], ['Head', 1]]) {
+      const b = character.model.getObjectByName(name)
+      if (!b) continue
+      b.updateWorldMatrix(true, false)
+      head.updateWorldMatrix(false, false)
+      _up.copy(hk.up).transformDirection(head.matrixWorld)
+      _qa.setFromUnitVectors(_up, _v.set(0, 1, 0)).slerp(_qi, 1 - w * k)
+      // 世界空间旋转 → 骨骼本地：local' = P⁻¹ · q · P · local
+      b.parent.getWorldQuaternion(_qp)
+      b.quaternion.premultiply(_qp.clone().invert().multiply(_qa).multiply(_qp))
+      b.updateMatrixWorld(true)
+    }
+  }
+
   // 玩家模式下没有表情轨：保持睁眼，偶尔眨眼（v2c 驱动：眨眼 = 7×まばたき，睁眼 = 20）
   function faceBlink(dt) {
     const u = character.material?.uniforms
@@ -661,6 +686,36 @@ export function createPlayer({ character, camera, canvas, hud, collider = null }
     }
   }
 
+  // 头骨本地坐标里的眼睛位置和裁剪球心：在绑定姿势（站直、面朝 +Z）下按世界方向量好再换到头骨本地
+  let headK = null
+  function headLocal() {
+    if (headK) return headK
+    let mesh = null
+    character.model.traverse((o) => {
+      if (!mesh && o.isSkinnedMesh) mesh = o
+    })
+    const i = mesh ? mesh.skeleton.bones.findIndex((b) => b.name === 'Head') : -1
+    if (i < 0) return null
+    // 静止姿势下：头骨世界矩阵 = 网格世界矩阵 × boneInverse⁻¹。临时把角色放回原点、朝 +Z 量一次
+    const m = character.model
+    const pos0 = m.position.clone(), rot0 = m.rotation.clone()
+    m.position.set(0, 0, 0)
+    m.rotation.set(0, 0, 0)
+    m.updateMatrixWorld(true)
+    const W = mesh.matrixWorld.clone()
+    m.position.copy(pos0)
+    m.rotation.copy(rot0)
+    m.updateMatrixWorld(true)
+    const inv = mesh.skeleton.boneInverses[i]
+    const toLocal = new THREE.Matrix4().multiplyMatrices(inv, W.clone().invert())
+    const headRest = new THREE.Vector3().applyMatrix4(new THREE.Matrix4().copy(toLocal).invert())
+    const at = (up, fwd) => headRest.clone().add(new THREE.Vector3(0, up * M, fwd * M)).applyMatrix4(toLocal)
+    headK = { eye: at(0.06, 0.1), clip: at(0.08, 0.03), up: new THREE.Vector3(0, 1, 0).transformDirection(toLocal) }
+    return headK
+  }
+  const _eye = new THREE.Vector3()
+  const _clip = new THREE.Vector3()
+  const _v2 = new THREE.Vector3()
   function placeCamera(dt = 0) {
     const cp = Math.cos(pitch)
     const dir = _v.set(Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp)
@@ -668,16 +723,22 @@ export function createPlayer({ character, camera, canvas, hud, collider = null }
     if (view === 'fp') {
       character.model.updateMatrixWorld(true)
       const head = character.model.getObjectByName('Head')
-      const eye = head ? head.getWorldPosition(new THREE.Vector3()) : p.clone().add(new THREE.Vector3(0, 1.45 * M, 0))
-      eye.y += 0.06 * M
-      eye.addScaledVector(new THREE.Vector3(Math.sin(charYaw), 0, Math.cos(charYaw)), 0.1 * M)
+      const hk = head && headLocal()
+      let eye, c
+      if (hk) {
+        // 眼睛和裁剪球都绑在头骨上（骨骼本地坐标），身体前倾（飞行姿势、鞠躬）时跟着头一起转，相机不会陷进后脑/头发里
+        eye = _eye.copy(hk.eye).applyMatrix4(head.matrixWorld)
+        c = _clip.copy(hk.clip).applyMatrix4(head.matrixWorld)
+      } else {
+        eye = _eye.copy(p).add(_clip.set(0, 1.45 * M, 0))
+        c = _clip.copy(eye)
+      }
       camera.position.copy(eye)
-      camera.lookAt(eye.clone().add(dir))
+      camera.lookAt(_v2.copy(eye).add(dir))
       camera.fov = 72
       camera.near = 0.04 * M
-      // 只裁掉头部（含刘海、耳朵），低头能看到身体、抬手能看到手
-      const c = head ? head.getWorldPosition(new THREE.Vector3()) : eye
-      HEAD_CLIP.uHeadClip.value.set(c.x, c.y + 0.09 * M, c.z, 0.17 * M)
+      // 只裁掉头部（含刘海、耳朵），低头能看到身体、抬手能看到手；球心略靠前，把相机周围也包进去（甩到脸前的头发不会糊在镜头上）
+      HEAD_CLIP.uHeadClip.value.set(c.x, c.y, c.z, 0.2 * M)
       character.group.visible = true
     } else {
       const pivot = p.clone().add(new THREE.Vector3(0, 1.15 * M, 0))

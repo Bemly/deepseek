@@ -28,11 +28,11 @@ export const HEAD_CLIP = { uHeadClip: { value: new THREE.Vector4(0, 0, 0, 0) } }
 export function addHeadClip(sh) {
   Object.assign(sh.uniforms, HEAD_CLIP)
   sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', 'varying vec3 vHeadW;\n#include <common>')
-    .replace('#include <project_vertex>', '#include <project_vertex>\nvHeadW = (modelMatrix * vec4(transformed, 1.0)).xyz;')
+    .replace('#include <common>', 'attribute float _head_k;\nvarying vec3 vHeadW;\nvarying float vHeadK;\n#include <common>')
+    .replace('#include <project_vertex>', '#include <project_vertex>\nvHeadW = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvHeadK = _head_k;')
   sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', 'uniform vec4 uHeadClip;\nvarying vec3 vHeadW;\n#include <common>')
-    .replace('void main() {', 'void main() {\n  if (uHeadClip.w > 0.0 && distance(vHeadW, uHeadClip.xyz) < uHeadClip.w) discard;')
+    .replace('#include <common>', 'uniform vec4 uHeadClip;\nvarying vec3 vHeadW;\nvarying float vHeadK;\n#include <common>')
+    .replace('void main() {', 'void main() {\n  if (uHeadClip.w > 0.0 && (vHeadK > 0.5 || distance(vHeadW, uHeadClip.xyz) < uHeadClip.w)) discard;')
 }
 
 export function addOutlineShell(mesh, widthLocal) {
@@ -148,6 +148,16 @@ export function createCharacter(scene) {
       api.material = mat
       api.face = face
       const outlineLocal = outlineWidth > 0 ? outlineWidth / BLEND_TO_WEB : 0
+      // 第一人称裁头用：每个顶点绑在头部刚体骨骼（头、眼、耳、呆毛）上的权重之和。头上整块的头发/发饰
+      // 也一起裁掉（只靠一个球裁不干净：低头、飞行前倾时会从镜头里露出来），垂下来的发束（Hair 链）照常显示
+      model.traverse((o) => {
+        if (!o.isSkinnedMesh || o.geometry.getAttribute('_head_k')) return
+        const head = o.skeleton.bones.map((b) => /^(Head|Eye[LR]|Ear[LR]\d|Ahoge\d)$/.test(b.name))
+        const si = o.geometry.attributes.skinIndex, sw = o.geometry.attributes.skinWeight
+        const k = new Float32Array(si.count)
+        for (let i = 0; i < si.count; i++) for (let j = 0; j < 4; j++) if (head[si.getComponent(i, j)]) k[i] += sw.getComponent(i, j)
+        o.geometry.setAttribute('_head_k', new THREE.BufferAttribute(k, 1))
+      })
       model.traverse((o) => {
         if (o.isMesh) {
           o.material = mat // v2c TOON 材质的复刻（character-material.js）

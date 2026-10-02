@@ -8,13 +8,15 @@ import * as THREE from 'three'
 
 const M = 12.5 // 1 m = 12.5 web 单位
 const PARAMS = [
-  // 前缀           刚度  阻尼   重力（m/s²） 跟随（根部平移有多少直接带走，越大越不"飘"） 粗细半径（m）
-  [/^Hair/, 22.0, 0.5, 3.0, 0.92, 0.012],
-  [/^Skirt/, 26.0, 0.5, 2.0, 0.92, 0.015],
-  [/^Tail/, 10.0, 0.4, 1.0, 0.85, 0.03],
-  [/^Ear/, 30.0, 0.55, 0.5, 0.9, 0.01],
-  [/^Ahoge/, 24.0, 0.45, 0.3, 0.85, 0.005],
+  // 前缀           刚度  阻尼   重力（m/s²） 跟随（身体局部晃动有多少直接带走） 粗细半径（m） 迎风（每 m/s 移动速度给多少 m/s² 的向后阻力）
+  [/^Hair/, 22.0, 0.5, 3.0, 0.92, 0.012, 0.9],
+  [/^Skirt/, 26.0, 0.5, 2.0, 0.92, 0.015, 0.2],
+  // 鲸鱼尾巴：比头发软、更重，跑动时小幅摆、转身/急停会甩过去（再软就会左右乱甩）
+  [/^Tail/, 12.0, 0.35, 2.0, 0.85, 0.03, 0.3],
+  [/^Ear/, 30.0, 0.55, 0.5, 0.9, 0.01, 0.15],
+  [/^Ahoge/, 24.0, 0.45, 0.3, 0.85, 0.005, 0.3],
 ]
+const WIND_MAX = 15 // m/s：再快（飞行加速）阻力也不再变大，头发保持向后飘而不是被扯直抽动
 // 参与碰撞的身体骨骼；手指/脚趾/眼睛的顶点并到最近的这些骨骼上
 const BODY = /^(Hips|Spine|Chest|UpperChest|Neck|Head|Shoulder[LR]|UpperArm[LR]|LowerArm[LR]|Hand[LR]|UpperLeg[LR]|LowerLeg[LR]|Foot[LR])$/
 
@@ -27,7 +29,14 @@ const _a = new THREE.Vector3()
 const _b = new THREE.Vector3()
 const _s = new THREE.Vector3()
 
+const _root = new THREE.Vector3()
+const _lastRoot = new THREE.Vector3()
+const _move = new THREE.Vector3()
+const _windDir = new THREE.Vector3()
+const _pre = new THREE.Vector3()
+
 export function createSpringBones(model) {
+  let rootReady = false
   const isChain = (n) => PARAMS.some(([re]) => re.test(n))
   const joints = [] // 按链从根到梢
   model.traverse((o) => {
@@ -39,7 +48,7 @@ export function createSpringBones(model) {
       const child = b.children.find((c) => c.isBone)
       // 尾端（本地）：有子骨用子骨位置，梢骨沿父骨长度延长
       const tailLocal = child ? child.position.clone() : new THREE.Vector3(0, prevLen / (b.getWorldScale(_s).x || 1), 0)
-      joints.push({ bone: b, tailLocal, len: 0, stiff: p[1], drag: p[2], grav: p[3], follow: p[4], jr: p[5] * M, slack: null, restQ: b.quaternion.clone(), cur: new THREE.Vector3(), prev: new THREE.Vector3(), lastHead: new THREE.Vector3(), ready: false })
+      joints.push({ bone: b, tailLocal, len: 0, stiff: p[1], drag: p[2], grav: p[3], follow: p[4], jr: p[5] * M, wind: p[6], slack: null, restQ: b.quaternion.clone(), cur: new THREE.Vector3(), prev: new THREE.Vector3(), lastHead: new THREE.Vector3(), ready: false })
       prevLen = tailLocal.length() * (b.getWorldScale(_s).x || 1)
       b = child
     }
@@ -68,9 +77,21 @@ export function createSpringBones(model) {
     joints,
     reset() {
       for (const j of joints) j.ready = false
+      rootReady = false
     },
     update(dt) {
       if (!joints.length) return
+      // 角色整体平移（走/跑/飞）：所有关节原样带走，不产生甩动；只把速度换成迎风阻力。
+      // 以前按 92% 跟随，飞行加速到上百 m/s 时每帧剩下的 8% 也有几十厘米，头发就会被扯得来回抽。
+      model.getWorldPosition(_root)
+      if (!rootReady) _lastRoot.copy(_root)
+      _move.copy(_root).sub(_lastRoot)
+      _lastRoot.copy(_root)
+      const raw = dt
+      const speed = rootReady && raw > 1e-4 ? _move.length() / raw / M : 0 // m/s
+      rootReady = true
+      _windDir.copy(_move).normalize().negate()
+      const windA = Math.min(speed, WIND_MAX)
       dt = Math.min(dt, 1 / 30)
       placeColliders(colliders)
       for (const j of joints) {
@@ -91,8 +112,8 @@ export function createSpringBones(model) {
           j.ready = true
           continue
         }
-        // 根部平移的大部分直接带走（不然跑起来头发被拖成水平），剩下的才产生甩动
-        const moved = _b.copy(head).sub(j.lastHead).multiplyScalar(j.follow)
+        // 整体平移全部带走；身体自己的晃动/转身（相对整体平移的部分）按跟随比例带走，剩下的产生甩动
+        const moved = _b.copy(head).sub(j.lastHead).sub(_move).multiplyScalar(j.follow).add(_move)
         j.cur.add(moved)
         j.prev.add(moved)
         j.lastHead.copy(head)
@@ -101,8 +122,10 @@ export function createSpringBones(model) {
         next.add(j.cur)
         next.addScaledVector(_s.copy(tailAnim).sub(j.cur), Math.min(1, j.stiff * dt))
         next.y -= j.grav * M * dt * dt
+        if (windA > 0.05) next.addScaledVector(_windDir, j.wind * windA * M * dt * dt)
         // 长度约束 + 身体碰撞（推出去之后再拉回骨长，最多来回三遍）
         next.sub(head).setLength(j.len).add(head)
+        _pre.copy(next)
         for (let it = 0; it < 3; it++) {
           let hit = false
           for (let i = 0; i < colliders.length; i++) {
@@ -118,7 +141,9 @@ export function createSpringBones(model) {
           if (!hit) break
           next.sub(head).setLength(j.len).add(head)
         }
-        j.prev.copy(j.cur)
+        // 被身体推开的位移只有一半算进速度（verlet 里 cur−prev 就是速度）：全算会弹开再被拉回、来回抽；
+        // 全不算头发会一直贴着身体蹭，被腿/手臂扫到时反而更跳
+        j.prev.copy(j.cur).addScaledVector(_pre.sub(next).negate(), 0.5)
         j.cur.copy(next)
         // 把骨骼从动画方向转到模拟方向（按权重）
         const from = tailAnim.sub(head).normalize()
