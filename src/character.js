@@ -25,10 +25,10 @@ export function addOutlineShell(mesh, widthLocal) {
   const mat = new THREE.MeshBasicMaterial({ color: OUTLINE_COLOR, side: THREE.BackSide })
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uOutlineW = { value: widthLocal }
-    sh.vertexShader = sh.vertexShader.replace(
-      '#include <begin_vertex>',
-      '#include <begin_vertex>\ntransformed += normalize(objectNormal) * uOutlineW;',
-    )
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', 'uniform float uOutlineW;\n#include <common>')
+      // 用 bind 空间的 normal 属性外扩（蒙皮之后会跟着骨骼转）；MeshBasic 非蒙皮时没有 objectNormal
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += normalize(normal) * uOutlineW;')
   }
   mat.customProgramCacheKey = () => 'ds-outline'
   const shell = mesh.clone() // SkinnedMesh.clone 会共享 skeleton + bind 矩阵，正好

@@ -22,6 +22,9 @@ const ClampShader = {
     varying vec2 vUv;
     void main() {
       vec3 c = texture2D(tDiffuse, vUv).rgb;
+      // 个别像素会出 NaN/Inf，泛光会把它糊满整屏变黑——在进泛光之前清掉
+      if (any(isnan(c)) || any(isinf(c))) c = vec3(0.0);
+      c = max(c, vec3(0.0));
       float m = max(max(c.r, c.g), c.b);
       if (m > uMax) c *= uMax / m;
       gl_FragColor = vec4(c, 1.0);
